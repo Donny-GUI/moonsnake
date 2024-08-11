@@ -1412,11 +1412,10 @@ class PythonASTWriter(NodeVisitor):
             self.visit_SuperMethod(node)
             return
         if isinstance(node.func, ast.Attribute):
-            self.fill()
+            self.write(" ")
             self.traverse(node.func.value)
             self.write(".")
             self.traverse(node.func.attr)
-            self.write(".")
             with self.delimit("(", ")"):
                 self.traverse(node.args)
             return

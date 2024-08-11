@@ -1,3 +1,7 @@
+from typing import Union
+
+TrueIfExistsElseNone = Union[bool, None]
+
 def has_value_attribute(obj) -> bool|None:
     if hasattr(obj, "value") == True:
          return True

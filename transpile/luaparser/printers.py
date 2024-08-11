@@ -553,6 +553,18 @@ class LuaOutputVisitor:
     def visit(self, node: Name) -> str:
         return self.visit(node.id)
 
+#class InstanceMethodCall(Statement):
+#    def __init__(self, source: Index, func: Name, args: list[Name], **kwargs) -> None:
+#        super(InstanceMethodCall, self).__init__("InstanceMethodCall", **kwargs)
+#        self.source = source
+#        self.func = func
+#        self.args = args
+
+    @visitor(InstanceMethodCall)
+    def visit(self, node: InstanceMethodCall) -> str:
+        return self.visit(node.source) + "." + self.visit(node.func) + "(" + \
+            self.visit(node.args) + ")"
+        
     @visitor(Index)
     def visit(self, node: Index) -> str:
         if node.notation == IndexNotation.DOT:

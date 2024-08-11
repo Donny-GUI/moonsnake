@@ -2,10 +2,8 @@ import os
 from transpile.astmaker import LuaToPythonModule
 from transpile.astwriter import PythonASTWriter
 from transpile.sourcewriter import SourceWriter
-from transpile.patternmatch import LuaAstMatch
-from transpile.utility import directory_files_by_extension, delete_files_in_directory
+from transpile.utility import directory_files_by_extension
 from transpile.tests import LuaToPythonTranspiler as LTPT
-
 
 
 def transpile_lua(file, patterns=False):

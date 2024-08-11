@@ -40,8 +40,4 @@ class LuaToPythonTranspiler:
             self.python_source_writer.add(node, string)
         with open(f".\\data\\_{os.path.basename(file).split(".lua")[0]}.py", "w") as f:
             this_python_source.dump(f)
-
-        
-
-
-        
+     
