@@ -27,13 +27,13 @@ class LuaToPythonTranspiler:
         return pythonparse(string)
 
     def transpile(self, file:str):
+        print(file)
         this_python_source = SourceWriter()
         lua_source = self.read_file(file)
         lua_ast: LuaSourceAst = self.make_lua_ast(lua_source)
         py_ast = self.lua_ast_convertor.to_module(lua_ast)
         with open("patterns.json", "w") as f:
             f.write(json.dumps(self.lua_ast_convertor._patterns, indent=4))
-        input()
         for node in py_ast.body:
             string = self.python_ast_writer.visit(node)
             this_python_source.add(node, string)

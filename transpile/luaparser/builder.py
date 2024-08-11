@@ -7,23 +7,6 @@ from transpile.luaparser.parser.LuaLexer import LuaLexer
 from typing import List, Tuple, Union
 from antlr4.Token import Token
 
-def istypes(object, *args):
-    if isinstance(args, (list, tuple)):
-        for item in args:
-            if isinstance(object, item):
-                return True
-        return 
-    if args == list:
-        return isinstance(object, list)
-    if args == None:
-        return isinstance(object, type(None))
-    return isinstance(object, args)
-
-def nottypes(obj, types):
-    if isinstance(types, (list, tuple, set)):
-        if type(obj) in types:
-            return
-        return True
 
 class SyntaxException(Exception):
     def __init__(self, user_msg, token=None):
@@ -1608,4 +1591,18 @@ class Builder:
                     if v.func.id == "extend":
                         return Constructor(node.targets, node.values)
         
+        # InstanceMethodCall
+        if isinstance(node, Invoke):
+            if isinstance(node.source, Index) and isinstance(node.func, Name):
+                return InstanceMethodCall(source=node.source, func=node.func, args=node.args)
+            
+        # ForEnumerate
+        if isinstance(node, Forin):
+            if isinstance(node.targets, list) and isinstance(node.iter, Call) and isinstance(node.iter.func, Name):
+                if node.iter.func.id == "ipairs":
+                    return ForEnumerate(targets=node.targets, iterator=node.iter.func, body=node.body)
+
+        
         return self.iter_polymorph(node)
+    
+

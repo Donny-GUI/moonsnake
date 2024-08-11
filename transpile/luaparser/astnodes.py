@@ -1064,7 +1064,22 @@ class SuperMethod(Statement):
         self.args = args
         self.super_args = super_args
 
+
+# TODO make these creatable in the builder.py file
+
 class InstanceMethodCall(Statement):
-    def __init__(self, source, func, args, **kwargs):
+    def __init__(self, source: Index, func: Name, args: list[Name], **kwargs) -> None:
         super(InstanceMethodCall, self).__init__("InstanceMethodCall", **kwargs)
+        self.source = source
+        self.func = func
+        self.args = args
         
+class ForEnumerate(Statement):
+    __match_args__ = ("targets", "iterator", "body")
+    def __init__(self, targets: List[Name], iterator: Name, body:list[Statement], **kwargs) -> None:
+        super(ForEnumerate, self).__init__("ForEnumerate", **kwargs)
+        self.targets: List[Name] = targets
+        self.iterator: Name = iterator
+        self.body: list[Statement] = body
+        self.orelse = []
+

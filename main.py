@@ -26,22 +26,16 @@ def transpile_lua(file, patterns=False):
         source.dump(f)
 
 def walk_transpile():
-    patmat = LuaAstMatch()
-    
     for file in directory_files_by_extension():
         print(file)
         transpile_lua(file)
 
-    patmat.save()
-
-def balatro_test():
+def node_test():
     ltpt = LTPT()
-    for file in os.listdir(f"C:\\Users\\{os.getlogin()}\\Desktop\\decompiled"):
-        if file.endswith(".lua"):
-            print(file)
-            ltpt.transpile(os.path.join(f"C:\\Users\\{os.getlogin()}\\Desktop\\decompiled", file))
+    for file in directory_files_by_extension():
+        ltpt.transpile(file)
 
 
 if __name__ == '__main__':
     print("begin")
-    balatro_test()
+    node_test()

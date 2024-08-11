@@ -9,45 +9,21 @@ from dataclasses import dataclass
 from transpile.macros import Is
 from transpile.nodes import ClassBase
 from transpile.patternmatch import LuaAstMatch
+from transpile.astwriter import PythonASTWriter
 
-
-# For dealing with all Invokes
-
-class ObjectActionArguments(ast.expr):
-    __match_args__ = ("objects", "actions", "arguments")
-    type__ = ("list[str]", "list[str]", "list[str]")
-    def __init__(
-            self,
-            objects: list[str],
-            actions: list[str],
-            arguments: list[str],
-            **kwargs) -> None:
-        self.objects:list[str] = objects
-        self.actions:list[str] = actions
-        self.arguments: list[str] = arguments
-
-
-
-
-
-"""----------------------------------------------------------------------------"""
-"""       Lua Node convertor                                                   """
-"""----------------------------------------------------------------------------"""
-
-
+# For finding all the methods and placing them in the correct class at the end
 @dataclass
 class FindableMethod:
     key: str
     function:ast.FunctionDef
 
 
-class LuaASTConvertor:
-    
-    def __init__(self, patmat: LuaAstMatch = None):
+# base class
+class ASTNodeConvertor:
+    def __init__(self) -> None:
         self._classes = []
         self._to_find: list[FindableMethod] = []
         self._classes_map: dict[str, ast.ClassDef] = {}
-        self._patmat:LuaAstMatch = patmat
         self._levels = []
 
         self._labels = {}
@@ -55,7 +31,7 @@ class LuaASTConvertor:
         self._gotos = []
         self._last_if = None
         self._patterns = {}
-
+    
     def convert(self, node):
         node_method = self._fetchMethod(node)
         n = node_method(node)
@@ -88,14 +64,61 @@ class LuaASTConvertor:
         
         return convertor
 
+    def get_typing(self, node: last.Node):
+        items = []
+        keys = []
+        for key, value in node.__dict__.items():
+            if isinstance(value, last.Node):
+                items.append(str(value.__class__.__name__))
+                keys.append(key)
+                kmore, imore = self.get_typing(value)
+                items.extend(imore)
+                keys.extend(kmore)
+            else:
+                if key.startswith("_"):
+                    continue
+                else:
+                    if isinstance(value, str):
+                        keys.append(key)
+                        items.append("STRING")
+
+        return keys, items
+
+    def save_pattern(self, node, keys, items, outcome):
+        
+        writ = PythonASTWriter()
+        out = writ.visit(outcome)
+        node = str(node.__class__.__name__)
+        if node.__class__.__name__ in self._patterns.keys():
+            self._patterns[node.__class__.__name__]["keys"].append(keys)
+            self._patterns[node.__class__.__name__]["items"].append(items)
+            self._patterns[node.__class__.__name__]["nodes"].append(node)
+            self._patterns[node.__class__.__name__]["outcomes"].append(out)
+        else:
+            self._patterns[node.__class__.__name__] = {
+                "keys":[keys],
+                "items":[items],
+                "nodes":[node],
+                "outcomes":[out]
+            }
+
+
+class LuaNodeConvertor(ASTNodeConvertor):
+    
+    def __init__(self):
+        super().__init__()
+
     def _super_from_callattr(self, node:ast.Call):
-        callfunc = ast.Attribute(value=ast.Call(func=ast.Name(id='super', 
-                                                              ctx=ast.Load()), 
-                                                args=[], 
-                                                keywords=[]), 
-                                 attr='__init__', 
-                                 ctx=ast.Load())
-        return ast.Call(func=callfunc, args=node.args, keywords=[])
+        callfunc = \
+            ast.Attribute(value=ast.Call(func=ast.Name(id='super', ctx=ast.Load()), 
+                                         args=[], 
+                                         keywords=[]), 
+                          attr='__init__', 
+                          ctx=ast.Load())
+                          
+        return ast.Call(func=callfunc, 
+                        args=node.args, 
+                        keywords=[])
     
     def _check_for_super(self, node:FindableMethod):
         clss = self._classes_map[node.key]
@@ -142,19 +165,7 @@ class LuaASTConvertor:
         n = [self.convert(x) for x in node.body]
         return n
 
-    def convert_Base(self, node:last.Base) -> ClassBase:
-        return ClassBase(name=node.name)
-
-    def convert_Constructor(self, node:last.Constructor) -> ast.ClassDef:
-        c = ast.ClassDef(name=node.name, 
-                         bases=[self.convert(x) for x in node.bases],
-                         keywords=[], 
-                         body=[], 
-                         decorator_list=[], 
-                         type_params=[])
-        self._classes.append(c)
-        self._classes_map[node.name] = c
-        return c
+    
 
     def convert_Assign(self, node:last.Assign=None) -> ast.Assign:
         # Get left hand expressions as python asts
@@ -177,7 +188,7 @@ class LuaASTConvertor:
         
     def convert_Do(self, node:last.Do=None) -> list[ast.AST]|None:
         items = []
-        for n in node.body:
+        for n in node.body.body:
             items.append(self.convert(n))
         
         return items
@@ -300,38 +311,6 @@ class LuaASTConvertor:
     def _is_import(self, node:last.Node):
         return isinstance(node, last.Call) and isinstance(node.func, last.Name) and node.func.id == "require"
     
-    def convert_Require(self, node:last.Require) -> ast.ImportFrom|ast.Import:
-        
-        def getdelim(string):
-            if "/" in string:
-                return "/"
-            if "." in string:
-                return "."
-            if "\\" in string:
-                return "\\"
-            return "$"
-        
-        delim = getdelim(node.args[0])
-        parts = node.args[0].split(delim) if delim != "$" else node.args[0]
-        if isinstance(parts, str):
-            return ast.Import(names=[ast.alias(name=parts[0])])
-        elif len(parts) == 2:
-            module, name = parts[0], ast.alias(name=parts[1])
-            return ast.ImportFrom(module=module, names=[name])
-        elif len(parts) >= 3:
-            xparts = parts[:-1]
-            module = ".".join(xparts)
-            name = ast.alias(name=xparts[-1])
-            return ast.ImportFrom(module=module, names=[name])
-             
-    def convert_MetaTable(self, node: last.MetaTable) -> ast.Name:
-        return ast.Name(id=f"self.__class__")
-
-    def convert_TableConstructor(self, node:last.TableConstructor) -> ast.Call:
-        args = self.convert_Args(node.args)
-        n = ast.Call(func=self.convert(node.func.id), args=args, keywords=[])
-        return n
-
     def convert_Call(self, node: last.Call=None):
         
         # check is pairs function
@@ -354,44 +333,7 @@ class LuaASTConvertor:
         n = ast.Call(func=func, args=args, keywords=keywords)
         return n
 
-    def get_typing(self, node: last.Node):
-        items = []
-        keys = []
-        for key, value in node.__dict__.items():
-            if isinstance(value, last.Node):
-                items.append(str(value.__class__.__name__))
-                keys.append(key)
-                kmore, imore = self.get_typing(value)
-                items.extend(imore)
-                keys.extend(kmore)
-            else:
-                if key.startswith("_"):
-                    continue
-                else:
-                    if isinstance(value, str):
-                        keys.append(key)
-                        items.append("STRING")
-
-                
-        return keys, items
-
-    def save_pattern(self, node, keys, items, outcome):
-        from transpile.astwriter import PythonASTWriter
-        writ = PythonASTWriter()
-        out = writ.visit(outcome)
-        node = str(node.__class__.__name__)
-        if node.__class__.__name__ in self._patterns.keys():
-            self._patterns[node.__class__.__name__]["keys"].append(keys)
-            self._patterns[node.__class__.__name__]["items"].append(items)
-            self._patterns[node.__class__.__name__]["nodes"].append(node)
-            self._patterns[node.__class__.__name__]["outcomes"].append(out)
-        else:
-            self._patterns[node.__class__.__name__] = {
-                "keys":[keys],
-                "items":[items],
-                "nodes":[node],
-                "outcomes":[out]
-            }
+    
 
     def convert_Invoke(self, node:last.Invoke) -> ast.Call:
         keys, items = self.get_typing(node)
@@ -401,48 +343,6 @@ class LuaASTConvertor:
         n = ast.Call(func=ast.Attribute(value=source, attr=func), args=args, keywords=[])
         self.save_pattern(node, keys, items, n)
         return n
-        
-    def convert_SuperMethod(self, node:last.Invoke):
-        c = self.convert_MethodCall(node)
-        return self._super_from_callattr(c)
-
-    def convert_MethodCall(self, node:last.Invoke) -> ast.Call:
-        # Convert the object part
-        obj_python_ast = self.convert(node.source)
-        for subnode in ast.walk(obj_python_ast):
-            if isinstance(subnode, ast.Name):
-                subnode.id = subnode.id.replace(":", ".")
-        
-        # Convert the method name part
-        method_name = self.convert(node.func)  # This is the 'method' part of 'object:method'
-        if isinstance(method_name, ast.Name):
-            method_name = method_name.id
-        elif isinstance(method_name, ast.Call):
-            if isinstance(method_name.func, ast.Name):
-                method_name = method_name.func.id
-            else:
-                method_name = method_name.func
-        
-        
-        # Create an ast.Attribute for the 'object.method' part
-        method_attr = ast.Attribute(
-            value=obj_python_ast,  # The object part as Python AST
-            attr=method_name,   # The method name as a string
-            ctx=ast.Load()         # Context is load because we're accessing an attribute
-        )
-
-        # Convert the arguments part
-        args = node.args  # This should be a list of argument nodes
-        args_python_ast = self.convert_Args(args)
-
-        # Create an ast.Call for the method invocation
-        call_node = ast.Call(
-            func=method_attr,
-            args=args_python_ast,
-            keywords=[]  # Lua doesn't have keyword arguments
-        )
-
-        return call_node
 
     def convert_Function(self, node:last.Function=None):
         name = self.convert(node.name)
@@ -735,7 +635,7 @@ class LuaASTConvertor:
         body = self.convert(node.body)
         t = ast.If(test=self.convert(node.test), body=ast.Break(), orelse=[])
         body.append(t)
-        n = ast.While(test=ast.Constant(value=True), body=body)
+        n = ast.While(test=ast.Constant(value=True), body=body, orelse=None)
         
         return n
 
@@ -824,51 +724,191 @@ class LuaASTConvertor:
         return ast.Compare(
             left=self.convert(node.left),
             ops=[ast.NotEq()],
-            comparators=[self.convert(node.right)])
+            comparators=[self.convert(node.right)]
+        )
     
     def convert_GreaterThanOp(self, node:last.GreaterThanOp):
         return ast.Compare(
             left=self.convert(node.left),
             ops=[ast.Gt()],
-            comparators=[self.convert(node.right)])
+            comparators=[self.convert(node.right)]
+        )
     
     def convert_GreaterOrEqThanOp(self, node:last.GreaterOrEqThanOp):
         return ast.Compare(
             left=self.convert(node.left),
             ops=[ast.GtE()],
-            comparators=[self.convert(node.right)])
+            comparators=[self.convert(node.right)]
+            )
 
     def convert_ModOp(self, node:last.ModOp):
         return ast.Compare(
             left=self.convert(node.left),
             ops=[ast.Mod()],
-            comparators=[self.convert(node.right)])
+            comparators=[self.convert(node.right)]
+            )
 
     def convert_ExpoOp(self, node:last.ExpoOp):
         return ast.Compare(
             left=self.convert(node.left),
             ops=[ast.Pow()],
-            comparators=[self.convert(node.right)])
+            comparators=[self.convert(node.right)]
+        )
     
-    def convert_ObjectActionArguments(self, node: ObjectActionArguments):
+    #/////////////////////////////////////////////////////////////////////
+    #  NEW NODES
+    #/////////////////////////////////////////////////////////////////////
+
+    def convert_Base(self, node:last.Base) -> ClassBase:
+        return ClassBase(name=node.name)
+
+    def convert_Constructor(self, node:last.Constructor) -> ast.ClassDef:
+        c = ast.ClassDef(
+            name=node.name, 
+            bases=[self.convert(x) for x in node.bases],
+            keywords=[], 
+            body=[], 
+            decorator_list=[], 
+            type_params=[]
+        )
+
+        self._classes.append(c)
+        self._classes_map[node.name] = c
         
-        o = ".".join(node.objects) if isinstance(node.objects, list) else node.objects
-        a = ".".join(node.actions) if isinstance(node.actions, list) else node.actions
-        args = ", ".join(node.arguments) if isinstance(node.arguments, list) > 1 else node.arguments
-        return ast.Call(func=ast.Attribute(value=ast.Name(id=o, 
-                                                          ctx=ast.Load()), 
-                                           attr=a, 
-                                           ctx=ast.Load()), 
-                        args=[self.convert(arg) for arg in args], 
-                        keywords=[])
+        return c
+    
+    def convert_ForEnumerate(self, node: last.ForEnumerate):
+        
+        iter_call = ast.Call(
+            func=ast.Name(id="enumerate", ctx=ast.Load()), 
+            args=self.convert_Args([node.iterator]), 
+            keywords=[]
+        )
+
+        return ast.For(
+            target=[self.convert(x) for x in node.targets],
+            iter=iter_call,
+            body=[self.convert(x) for x in node.body],
+            orelse=[],
+            type_comment=None
+        )
+    
+    def convert_InstanceMethodCall(self, node:last.InstanceMethodCall):
+    
+        call_func = ast.Attribute(
+            value=self.convert(node.source), 
+            attr=node.func.id, 
+            ctx=ast.Store()
+        )
+
+        return ast.Call(
+            func=call_func, 
+            args=self.convert_Args(node.args), 
+            keywords=[]
+        )
+    
+    def convert_Require(self, node:last.Require) -> ast.ImportFrom|ast.Import:
+        
+        def getdelim(string):
+            if "/" in string:
+                return "/"
+            if "." in string:
+                return "."
+            if "\\" in string:
+                return "\\"
+            return "$"
+        
+        # incase its just a require statement
+        
+        if not len(node.args) >= 1:
+            return ""
+        
+        delim = getdelim(node.args[0])
+        parts = node.args[0].split(delim) if delim != "$" else node.args[0]
+        
+        if isinstance(parts, str):
+            return ast.Import(names=[ast.alias(name=parts[0])])
+        elif len(parts) == 2:
+            module, name = parts[0], ast.alias(name=parts[1])
+            
+            return ast.ImportFrom(
+                module=module, 
+                names=[name]
+            )
+        
+        elif len(parts) >= 3:
+            xparts = parts[:-1]
+            module = ".".join(xparts)
+            name = ast.alias(name=xparts[-1])
+            
+            return ast.ImportFrom(
+                module=module, 
+                names=[name]
+            )
+             
+    def convert_MetaTable(self, node: last.MetaTable) -> ast.Name:
+        return ast.Name(id=f"self.__class__")
+
+    def convert_TableConstructor(self, node:last.TableConstructor) -> ast.Call:
+        
+        args = self.convert_Args(node.args)
+        n = ast.Call(
+            func=self.convert(node.func), 
+            args=args, 
+            keywords=[]
+        )
+        
+        return n
+
+    def convert_SuperMethod(self, node:last.Invoke):
+        c = self.convert_MethodCall(node)
+        return self._super_from_callattr(c)
+
+    def convert_MethodCall(self, node:last.Invoke) -> ast.Call:
+        
+        # Convert the object part
+        obj_python_ast = self.convert(node.source)
+        
+        for subnode in ast.walk(obj_python_ast):
+            if isinstance(subnode, ast.Name):
+                subnode.id = subnode.id.replace(":", ".")
+        
+        # Convert the method name part
+        method_name = self.convert(node.func)  # This is the 'method' part of 'object:method'
+        
+        if isinstance(method_name, ast.Name):
+            method_name = method_name.id
+        elif isinstance(method_name, ast.Call):
+            if isinstance(method_name.func, ast.Name):
+                method_name = method_name.func.id
+            else:
+                method_name = method_name.func
+        
+        
+        # Create an ast.Attribute for the 'object.method' part
+        method_attr = ast.Attribute(
+            value=obj_python_ast,  # The object part as Python AST
+            attr=method_name,   # The method name as a string
+            ctx=ast.Load()         # Context is load because we're accessing an attribute
+        )
+
+        # Convert the arguments part
+        args = node.args  # This should be a list of argument nodes
+        args_python_ast = self.convert_Args(args)
+
+        # Create an ast.Call for the method invocation
+        call_node = ast.Call(
+            func=method_attr,
+            args=args_python_ast,
+            keywords=[]  # Lua doesn't have keyword arguments
+        )
+
+        return call_node
 
 
-    # NEW NODES GO HERE
-
-
-class LuaToPythonModule(LuaASTConvertor):
+class LuaToPythonModule(LuaNodeConvertor):
     def __init__(self, patmat: LuaAstMatch = None):
-        super().__init__(patmat)
+        super().__init__()
         self.total_nodes = []
         self.string = ""
         self.object = None
