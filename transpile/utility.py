@@ -7,6 +7,41 @@ import functools
 WindowsPath = TypeVar("WindowsPath", str,Path)
 
 
+def filename(path:str):
+    return os.path.basename(path).split(".")[0]
+
+def set_extension(path:str, extension:str):
+    if extension.startswith(".") != True:
+        extension = "." + extension
+    return path.rsplit(".")[0] + extension
+
+def extension(path:str):
+    return os.path.splitext(path)[1]
+
+def unique_filename(path:str):
+    
+    def make_filename(filepath:str, index:int=None):
+        ext = extension(filepath)
+        file = filename(filepath)
+
+        if index:
+            file = file.rsplit("_")[0]
+            file += "_" + str(index)
+        file = file + ext
+
+        return os.path.join(os.getcwd(), file)
+
+    count = 0
+    while True:
+        # stop if the filename is unique
+        if os.path.exists(path) == False:
+            break
+        # increment the ending number if not
+        count+=1 
+        path = make_filename(path, count)
+    
+    return path
+
 def directory_files_by_extension(directory: WindowsPath=f"C:\\Users\\{os.getlogin()}\\Desktop", extension:str=".lua"):
 
     files = []
