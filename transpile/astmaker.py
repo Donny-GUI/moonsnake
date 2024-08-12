@@ -8,7 +8,7 @@ import os
 from pathlib import Path
 from dataclasses import dataclass
 from transpile.macros import Is
-from transpile.nodes import ClassBase
+from transpile.luaparser.astnodes import Base
 from transpile.patternmatch import LuaAstMatch
 from transpile.astwriter import PythonASTWriter
 
@@ -810,8 +810,8 @@ class LuaNodeConvertor(ASTNodeConvertor):
     #  NEW NODES
     # /////////////////////////////////////////////////////////////////////
 
-    def convert_Base(self, node: last.Base) -> ClassBase:
-        return ClassBase(name=node.name)
+    def convert_Base(self, node: last.Base) -> Base:
+        return Base(name=node.name)
 
     def convert_Constructor(self, node: last.Constructor) -> ast.ClassDef:
         c = ast.ClassDef(
