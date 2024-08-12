@@ -1,41 +1,40 @@
 import transpile.luaparser.ast as last
 
 
-
 class Is:
 
     def Node(node):
         return isinstance(node, last.Node)
 
-    def Name(node:last.Node):
+    def Name(node: last.Node):
         return isinstance(node, last.Name)
 
-    def Attribute(node:last.Node):
+    def Attribute(node: last.Node):
         if isinstance(node, last.Index):
             if node.notation == last.IndexNotation.DOT:
                 return True
         return
 
-    def Index(node:last.Node):
+    def Index(node: last.Node):
         if isinstance(node, last.Index):
             if node.notation == last.IndexNotation.SQUARE:
                 return True
         return
-    
-    def List(node:last.Table):
+
+    def List(node: last.Table):
         if isinstance(node, last.Table) == False:
             return
         for field in node.fields:
             if field.key == None:
                 return True
             return
-    
-    def Dict(node:last.Table):
+
+    def Dict(node: last.Table):
         if isinstance(node, last.Table) == False:
             return
         return not Is.List(node)
-        
-    def ClassDef(node:last.Node):
+
+    def ClassDef(node: last.Node):
         if isinstance(node, last.Assign):
             for v in node.values:
                 if isinstance(v, last.Invoke) == True:
@@ -43,8 +42,8 @@ class Is:
                         if v.func.id == "extend":
                             return True
         return
-    
-    def Localize(node:last.Assign):
+
+    def Localize(node: last.Assign):
         if isinstance(node, last.Assign):
             for v in node.values:
                 if isinstance(v, last.Invoke) == True:
@@ -77,8 +76,8 @@ class Is:
                 if not isinstance(item, check):
                     return
             return True
-        return 
-    
+        return
+
     def Require(node):
         if isinstance(node.func, last.Name):
             if node.func.id == "require":
@@ -86,7 +85,3 @@ class Is:
         if isinstance(node, last.Name):
             if node.id == "require":
                 return True
-        
-        
-
-

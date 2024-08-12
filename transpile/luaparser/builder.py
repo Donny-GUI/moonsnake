@@ -12,7 +12,7 @@ class SyntaxException(Exception):
     def __init__(self, user_msg, token=None):
         if token:
             message = (
-                    "(" + str(token.line) + "," + str(token.start) + "): Error: " + user_msg
+                "(" + str(token.line) + "," + str(token.start) + "): Error: " + user_msg
             )
         else:
             message = "Error: " + user_msg
@@ -267,7 +267,7 @@ class Builder:
         self._hidden_handled_stack.append(self._hidden_handled)
 
     def next_is_rc(
-            self, type_to_seek: int, hidden_right: bool = True
+        self, type_to_seek: int, hidden_right: bool = True
     ) -> Optional[Token]:
         token = self._stream.LT(1)
         tok_type: int = token.type
@@ -412,7 +412,7 @@ class Builder:
         if idx + 1 < len(self.comments):
             if self.comments[idx] is None and self.comments[idx + 1] is None:
                 # clean list
-                self.comments = self.comments[idx + 2:]
+                self.comments = self.comments[idx + 2 :]
                 return comments
         return []
 
@@ -491,16 +491,16 @@ class Builder:
         comments = self.get_comments()
 
         stat = (
-                self.parse_assignment()
-                or self.parse_var(is_statement=True)
-                or self.parse_while_stat()
-                or self.parse_repeat_stat()
-                or self.parse_local()
-                or self.parse_goto_stat()
-                or self.parse_if_stat()
-                or self.parse_for_stat()
-                or self.parse_function()
-                or self.parse_label()
+            self.parse_assignment()
+            or self.parse_var(is_statement=True)
+            or self.parse_while_stat()
+            or self.parse_repeat_stat()
+            or self.parse_local()
+            or self.parse_goto_stat()
+            or self.parse_if_stat()
+            or self.parse_for_stat()
+            or self.parse_function()
+            or self.parse_label()
         )
 
         if stat:
@@ -521,7 +521,7 @@ class Builder:
 
         return None
 
-    def parse_ret_stat(self) -> Return | bool: # type: ignore
+    def parse_ret_stat(self) -> Return | bool:  # type: ignore
         self.save()
         if self.next_is_rc(Tokens.RETURN):
             t: Token = self._LT
@@ -534,7 +534,7 @@ class Builder:
             return Return(expr_list, first_token=t, last_token=self._LT)
         return self.failure()
 
-    def parse_assignment(self) -> Assign | bool: # type: ignore
+    def parse_assignment(self) -> Assign | bool:  # type: ignore
         self.save()
         t: Token = self._stream.LT(1)
         targets = self.parse_var_list()
@@ -543,11 +543,15 @@ class Builder:
                 values = self.parse_expr_list()
                 if values:
                     self.success()
-                    
-                    return self.polymorph(Assign(targets,
-                                                values,
-                                                first_token=t,
-                                                last_token=self._LT,))
+
+                    return self.polymorph(
+                        Assign(
+                            targets,
+                            values,
+                            first_token=t,
+                            last_token=self._LT,
+                        )
+                    )
                 else:
                     self.abort()
 
@@ -617,13 +621,19 @@ class Builder:
         self.save()
         if self.next_is_rc(Tokens.DOT) and self.next_is_rc(Tokens.NAME, False):
             self.success()
-            idx1 = self.polymorph(Name(self.text,
-                                      first_token=self._LT,
-                                      last_token=self._LT,))
-            return Index(idx1,
-                         # value must be set in parent
-                         Name(""),
-                         last_token=self._LT,)
+            idx1 = self.polymorph(
+                Name(
+                    self.text,
+                    first_token=self._LT,
+                    last_token=self._LT,
+                )
+            )
+            return Index(
+                idx1,
+                # value must be set in parent
+                Name(""),
+                last_token=self._LT,
+            )
 
         self.failure_save()
         if self.next_is_rc(Tokens.OBRACK):
@@ -653,9 +663,13 @@ class Builder:
 
         self.failure_save()
         if self.next_is_rc(Tokens.COL) and self.next_is_rc(Tokens.NAME):
-            name = self.polymorph(Name(self.text, 
-                                       first_token=self._LT, 
-                                       last_token=self._LT,))
+            name = self.polymorph(
+                Name(
+                    self.text,
+                    first_token=self._LT,
+                    last_token=self._LT,
+                )
+            )
             table = self.parse_table_constructor(False)
             if table:
                 self.success()
@@ -664,7 +678,13 @@ class Builder:
 
         self.failure_save()
         if self.next_is_rc(Tokens.COL) and self.next_is_rc(Tokens.NAME):
-            name = self.polymorph(Name( self.text, first_token=self._LT, last_token=self._LT,))
+            name = self.polymorph(
+                Name(
+                    self.text,
+                    first_token=self._LT,
+                    last_token=self._LT,
+                )
+            )
             if self.next_is_rc(Tokens.STRING, False):
                 string = self.parse_lua_str(self.text, self._LT)
                 self.success()
@@ -910,7 +930,7 @@ class Builder:
                             step = 1
                             # optional step
                             if self.next_is(Tokens.COMMA) and self.next_is_rc(
-                                    Tokens.COMMA
+                                Tokens.COMMA
                             ):
                                 step = self.parse_expr()
 
@@ -1282,13 +1302,13 @@ class Builder:
             while True:
                 self.save()
                 if self.next_in_rc(
-                        [
-                            Tokens.BITAND,
-                            Tokens.BITOR,
-                            Tokens.BITNOT,
-                            Tokens.BITRSHIFT,
-                            Tokens.BITRLEFT,
-                        ]
+                    [
+                        Tokens.BITAND,
+                        Tokens.BITOR,
+                        Tokens.BITNOT,
+                        Tokens.BITRSHIFT,
+                        Tokens.BITRLEFT,
+                    ]
                 ):
                     op = self.type
                     right = self.parse_unary_expr()
@@ -1390,7 +1410,6 @@ class Builder:
             return atom
         if self.next_is(Tokens.VARARGS) and self.next_is_rc(Tokens.VARARGS):
             return Varargs()
-
 
         if self.next_is(Tokens.NUMBER) and self.next_is_rc(Tokens.NUMBER):
             # TODO: optimize
@@ -1559,14 +1578,14 @@ class Builder:
         if self.next_in_rc([Tokens.COMMA, Tokens.SEMCOL]):
             return self.success()
         return self.failure()
-    
-    def iter_polymorph(self, node:Node):
+
+    def iter_polymorph(self, node: Node):
         if isinstance(node, Node):
             for key, value in node.__dict__.items():
                 if isinstance(value, Node):
                     setattr(node, key, self.polymorph(value))
         return node
-  
+
     def polymorph(self, node: Node):
         if isinstance(node, Call) and isinstance(node.func, Name):
             # REQUIRE
@@ -1576,33 +1595,44 @@ class Builder:
             if node.func.id == "getmetatable":
                 return MetaTable(func=node.func, args=node.args)
             # TABLECONSTRUCTOR
-            if isinstance(node.args, list) and len(node.args) > 1 and isinstance(node.args[0], Table):
+            if (
+                isinstance(node.args, list)
+                and len(node.args) > 1
+                and isinstance(node.args[0], Table)
+            ):
                 return TableConstructor(func=node.func, args=node.args)
-        
+
         # INITIALIZER
         if isinstance(node, Method) and isinstance(node.name, Name):
             if node.name.id == "init":
-                return Initializer(source=node.source, name=node.name, args=node.args, body=node.body)
-            
+                return Initializer(
+                    source=node.source, name=node.name, args=node.args, body=node.body
+                )
+
         # CONSTRUCTOR
         if isinstance(node, Assign):
             for v in node.values:
                 if isinstance(v, Invoke) and isinstance(v.func, Name):
                     if v.func.id == "extend":
                         return Constructor(node.targets, node.values)
-        
+
         # InstanceMethodCall
         if isinstance(node, Invoke):
             if isinstance(node.source, Index) and isinstance(node.func, Name):
-                return InstanceMethodCall(source=node.source, func=node.func, args=node.args)
-            
+                return InstanceMethodCall(
+                    source=node.source, func=node.func, args=node.args
+                )
+
         # ForEnumerate
         if isinstance(node, Forin):
-            if isinstance(node.targets, list) and isinstance(node.iter, Call) and isinstance(node.iter.func, Name):
+            if (
+                isinstance(node.targets, list)
+                and isinstance(node.iter, Call)
+                and isinstance(node.iter.func, Name)
+            ):
                 if node.iter.func.id == "ipairs":
-                    return ForEnumerate(targets=node.targets, iterator=node.iter.func, body=node.body)
+                    return ForEnumerate(
+                        targets=node.targets, iterator=node.iter.func, body=node.body
+                    )
 
-        
         return self.iter_polymorph(node)
-    
-

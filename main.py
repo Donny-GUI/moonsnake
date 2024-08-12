@@ -7,7 +7,7 @@ from transpile.tests import LuaToPythonTranspiler as LTPT
 from transpile.utility import unique_filename, set_extension
 
 
-def lua_file_to_python_string(path:str) -> str:
+def lua_file_to_python_string(path: str) -> str:
     print(f"[Transpiling]: {path}")
     # init classes for transpiler
     convert = LuaToPythonModule(None)
@@ -21,8 +21,9 @@ def lua_file_to_python_string(path:str) -> str:
         source.add(node, string)
 
     return source.dump()
-    
-def transpile_lua_file(path:str):
+
+
+def transpile_lua_file(path: str):
 
     print(f"[Transpiling]: {path}")
     # init classes for transpiler
@@ -41,15 +42,17 @@ def transpile_lua_file(path:str):
     for node in mod.body:
         string = writer.visit(node)
         source.add(node, string)
-    
-    # write the file 
+
+    # write the file
     with open(pyfile, "w") as f:
         source.dump(f)
+
 
 def walk_transpile():
     for file in directory_files_by_extension():
         print(file)
         transpile_lua_file(file)
+
 
 def node_test():
     ltpt = LTPT()
@@ -57,6 +60,6 @@ def node_test():
         ltpt.transpile(file)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     print("begin")
     node_test()

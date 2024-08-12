@@ -4,23 +4,26 @@ from typing import TypeVar
 import functools
 
 
-WindowsPath = TypeVar("WindowsPath", str,Path)
+WindowsPath = TypeVar("WindowsPath", str, Path)
 
 
-def filename(path:str):
+def filename(path: str):
     return os.path.basename(path).split(".")[0]
 
-def set_extension(path:str, extension:str):
+
+def set_extension(path: str, extension: str):
     if extension.startswith(".") != True:
         extension = "." + extension
     return path.rsplit(".")[0] + extension
 
-def extension(path:str):
+
+def extension(path: str):
     return os.path.splitext(path)[1]
 
-def unique_filename(path:str):
-    
-    def make_filename(filepath:str, index:int=None):
+
+def unique_filename(path: str):
+
+    def make_filename(filepath: str, index: int = None):
         ext = extension(filepath)
         file = filename(filepath)
 
@@ -37,12 +40,16 @@ def unique_filename(path:str):
         if os.path.exists(path) == False:
             break
         # increment the ending number if not
-        count+=1 
+        count += 1
         path = make_filename(path, count)
-    
+
     return path
 
-def directory_files_by_extension(directory: WindowsPath=f"C:\\Users\\{os.getlogin()}\\Desktop", extension:str=".lua"):
+
+def directory_files_by_extension(
+    directory: WindowsPath = f"C:\\Users\\{os.getlogin()}\\Desktop",
+    extension: str = ".lua",
+):
 
     files = []
     for root, _, fs in os.walk(directory):
@@ -51,10 +58,12 @@ def directory_files_by_extension(directory: WindowsPath=f"C:\\Users\\{os.getlogi
                 files.append(os.path.join(root, file))
     return files
 
-def delete_files_in_directory(directory:str=".\\converted\\"):
+
+def delete_files_in_directory(directory: str = ".\\converted\\"):
     for root, dirs, files in os.walk(directory):
         for file in files:
             os.remove(os.path.join(root, file))
+
 
 def update(object="", action="", message=""):
     if object != "":
@@ -73,7 +82,7 @@ def logcall(func):
         print(f"   Arguments: args={args}, kwargs={kwargs}")
         result = func(*args, **kwargs)
         print(f"   Returned : {result}")
-        
+
         return result
-    
-    return wrapper     
+
+    return wrapper

@@ -187,13 +187,13 @@ class WalkVisitor:
         self._nodes.append(node)
         for sub in node.__match_args__:
             self.visit(getattr(node, sub))
-    
+
     @visitor(Require)
     def visit(self, node):
         self._nodes.append(node)
         for sub in node.__match_args__:
             self.visit(getattr(node, sub))
-    
+
     @visitor(Constructor)
     def visit(self, node):
         self._nodes.append(node)
@@ -410,4 +410,5 @@ class ParserErrorListener(ErrorListener):
     ):
         pass
 
-class AST(Node):...
+
+class AST(Node): ...

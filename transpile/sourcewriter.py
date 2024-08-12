@@ -3,7 +3,7 @@ import ast
 import os
 
 
-def fix_digit_no_space(string:str):
+def fix_digit_no_space(string: str):
     pattern = r"(\w+)(\.+)\w(\+|\-)\w(d+)([A-Za-z_\.\(\)])"
 
     def replace_pattern(match):
@@ -18,35 +18,38 @@ def fix_digit_no_space(string:str):
     result = re.sub(pattern, replace_pattern, string)
     return result
 
+
 def fix_kv_pairs(string: str):
     p = r"for\s(kv|k|v|_v|_k)\sin\s"
     string = re.sub(p, r"for k, v in ", string)
     return string
 
-def fix_ipairs(string:str):
+
+def fix_ipairs(string: str):
     pattern = r"\sin\sipairs\("
     string = re.sub(pattern, r" in enumerate(", string)
     return string
 
-def indexing_table_fix(string:str):
+
+def indexing_table_fix(string: str):
     """
     Finds occurrences of patterns like '2[self.loc_debuff_lines] = '
     and swaps the word inside the brackets with the digit outside the brackets.
-    
+
     Args:
         string (str): The input string containing the patterns to be modified.
-    
+
     Returns:
         str: The modified string with swapped patterns.
     """
-    
+
     def replace_pattern(match):
         """
         Replace the matched pattern with the swapped version.
-        
+
         Args:
             match (re.Match): The regex match object.
-        
+
         Returns:
             str: The modified string with the swapped values.
         """
@@ -56,31 +59,32 @@ def indexing_table_fix(string:str):
 
     # Define the regex pattern
     pattern = r"(\d+)\[(\w+)\] = "
-    
+
     # Use re.sub to replace all occurrences using the replace_pattern function
     result = re.sub(pattern, replace_pattern, string)
-    
+
     return result
 
-def indexing_table_fix_string(string:str):
+
+def indexing_table_fix_string(string: str):
     """
     Finds occurrences of patterns like '2[self.loc_debuff_lines] = '
     and swaps the word inside the brackets with the digit outside the brackets.
-    
+
     Args:
         string (str): The input string containing the patterns to be modified.
-    
+
     Returns:
         str: The modified string with swapped patterns.
     """
-    
+
     def replace_pattern(match):
         """
         Replace the matched pattern with the swapped version.
-        
+
         Args:
             match (re.Match): The regex match object.
-        
+
         Returns:
             str: The modified string with the swapped values.
         """
@@ -90,7 +94,7 @@ def indexing_table_fix_string(string:str):
 
     # Define the regex pattern
     pattern = r"('\w+')\[(\w+)\]"
-    
+
     # Use re.sub to replace all occurrences using the replace_pattern function
     try:
         result = re.sub(pattern, replace_pattern, string)
@@ -98,16 +102,17 @@ def indexing_table_fix_string(string:str):
         pass
     return result
 
+
 def integer_floating_fix(string: str) -> str:
     """
     Fixes the formatting of numeric and floating-point literals in the given string.
-    
-    This function searches for patterns where a digit is followed by an uppercase letter and a lowercase 
+
+    This function searches for patterns where a digit is followed by an uppercase letter and a lowercase
     letter sequence ending with a period. It inserts a space after the digit to improve readability.
 
     Args:
         string (str): The input string to be fixed.
-    
+
     Returns:
         str: The modified string with the fixed formatting.
     """
@@ -115,8 +120,9 @@ def integer_floating_fix(string: str) -> str:
     patsearch = re.search(pattern, string)
     if patsearch:
         start, stop = patsearch.span()
-        string = string[:start+1] + " " + string[start+1:]
+        string = string[: start + 1] + " " + string[start + 1 :]
     return string
+
 
 def index_fix(string: str) -> str:
     """
@@ -127,7 +133,7 @@ def index_fix(string: str) -> str:
 
     Args:
         string (str): The input string to be fixed.
-    
+
     Returns:
         str: The modified string with corrected indexing syntax.
     """
@@ -140,6 +146,7 @@ def index_fix(string: str) -> str:
         string = re.sub(matching, f"{object}[{digit}]", string)
     return string
 
+
 def digit_fix(string: str):
     pattern = r"(\d+)\[(.+)\]\s=\s"
 
@@ -147,7 +154,7 @@ def digit_fix(string: str):
         x = match.group(1)
         y = match.group(2)
         return rf"{y}[{x}] = "
-    
+
     # Use re.sub to replace all occurrences using the replace_pattern function
     try:
         result = re.sub(pattern, replace_pattern, string)
@@ -169,11 +176,12 @@ def extract_method_arguments(method_string: str) -> str:
     Returns:
         str: A string of the method arguments, or None if no arguments are found.
     """
-    pattern = r'def\s+\w+\s*\(\s*([^)]+)\s*\):'
+    pattern = r"def\s+\w+\s*\(\s*([^)]+)\s*\):"
     match = re.search(pattern, method_string)
     if match:
         return match.group(1)
     return None
+
 
 def fix_supers(string: str) -> str:
     """
@@ -191,6 +199,7 @@ def fix_supers(string: str) -> str:
     argfind = extract_method_arguments(string)
     string = re.sub(superfind, f":\n        super().__init__({argfind})", string)
     return string
+
 
 def fix_bases_init(string: str, class_ast: ast.ClassDef) -> str:
     """
@@ -211,6 +220,7 @@ def fix_bases_init(string: str, class_ast: ast.ClassDef) -> str:
         argfind = extract_method_arguments(string)
         string = re.sub(pat, f"\n        super().__init__({argfind})", string)
     return string
+
 
 class SourceWriter:
     def __init__(self) -> None:
@@ -251,7 +261,7 @@ class SourceWriter:
         source = fix_kv_pairs(source)
         source = fix_ipairs(source)
         source = indexing_table_fix_string(source)
-        #source = digit_fix(source)
+        # source = digit_fix(source)
         return source
 
     def add(self, node: ast.AST, source: str) -> None:
@@ -274,7 +284,7 @@ class SourceWriter:
         source = fix_kv_pairs(source)
         source = fix_ipairs(source)
         source = indexing_table_fix_string(source)
-        #source = digit_fix(source)
+        # source = digit_fix(source)
         self.source.append(source)
 
         with open("temp.py", "a") as f:
@@ -301,4 +311,3 @@ class SourceWriter:
         if fp:
             fp.write(l)
         return l
-

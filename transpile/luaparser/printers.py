@@ -89,7 +89,7 @@ class PythonStyleVisitor:
             self.dedent()
             k += 1
         return res
-    
+
     @visitor(type)
     def visit(self, node):
         return ""
@@ -252,7 +252,8 @@ class LuaOutputVisitor:
     def visit(self, node: Block) -> str:
         self._level += 1
         output = indent(
-            "\n".join([self.visit(n) for n in node.body]), " " * (self._indent_size if self._level > 1 else 0)
+            "\n".join([self.visit(n) for n in node.body]),
+            " " * (self._indent_size if self._level > 1 else 0),
         )
         self._level -= 1
         return output
@@ -277,9 +278,7 @@ class LuaOutputVisitor:
 
     @visitor(If)
     def visit(self, node: If) -> str:
-        output = (
-            "if " + self.visit(node.test) + " then\n" + self.visit(node.body)
-        )
+        output = "if " + self.visit(node.test) + " then\n" + self.visit(node.body)
         if isinstance(node.orelse, ElseIf):
             output += "\n" + self.visit(node.orelse)
         elif node.orelse:
@@ -289,9 +288,7 @@ class LuaOutputVisitor:
 
     @visitor(ElseIf)
     def visit(self, node: ElseIf) -> str:
-        output = (
-            "elseif " + self.visit(node.test) + " then\n" + self.visit(node.body)
-        )
+        output = "elseif " + self.visit(node.test) + " then\n" + self.visit(node.body)
         if isinstance(node.orelse, ElseIf):
             output += "\n" + self.visit(node.orelse)
         elif node.orelse:
@@ -553,18 +550,24 @@ class LuaOutputVisitor:
     def visit(self, node: Name) -> str:
         return self.visit(node.id)
 
-#class InstanceMethodCall(Statement):
-#    def __init__(self, source: Index, func: Name, args: list[Name], **kwargs) -> None:
-#        super(InstanceMethodCall, self).__init__("InstanceMethodCall", **kwargs)
-#        self.source = source
-#        self.func = func
-#        self.args = args
+    # class InstanceMethodCall(Statement):
+    #    def __init__(self, source: Index, func: Name, args: list[Name], **kwargs) -> None:
+    #        super(InstanceMethodCall, self).__init__("InstanceMethodCall", **kwargs)
+    #        self.source = source
+    #        self.func = func
+    #        self.args = args
 
     @visitor(InstanceMethodCall)
     def visit(self, node: InstanceMethodCall) -> str:
-        return self.visit(node.source) + "." + self.visit(node.func) + "(" + \
-            self.visit(node.args) + ")"
-        
+        return (
+            self.visit(node.source)
+            + "."
+            + self.visit(node.func)
+            + "("
+            + self.visit(node.args)
+            + ")"
+        )
+
     @visitor(Index)
     def visit(self, node: Index) -> str:
         if node.notation == IndexNotation.DOT:
@@ -583,7 +586,7 @@ class LuaOutputVisitor:
     @visitor(SemiColon)
     def visit(self, node) -> str:
         return ";"
-    
+
     @visitor(Initializer)
     def visit(self, node) -> str:
         return ""
@@ -599,7 +602,7 @@ class LuaOutputVisitor:
     @visitor(MethodCall)
     def visit(self, node) -> str:
         return ""
-    
+
     @visitor(MetaTable)
     def visit(self, node) -> str:
         return ""
@@ -607,6 +610,3 @@ class LuaOutputVisitor:
     @visitor(TableConstructor)
     def visit(self, node) -> str:
         return ""
-
-
-    

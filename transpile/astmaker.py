@@ -1,6 +1,7 @@
 """
 converts transpile.luaparser.astnodes into python.ast AST 
 """
+
 import ast
 import transpile.luaparser.ast as last
 import os
@@ -11,11 +12,12 @@ from transpile.nodes import ClassBase
 from transpile.patternmatch import LuaAstMatch
 from transpile.astwriter import PythonASTWriter
 
+
 # For finding all the methods and placing them in the correct class at the end
 @dataclass
 class FindableMethod:
     key: str
-    function:ast.FunctionDef
+    function: ast.FunctionDef
 
 
 # base class
@@ -31,29 +33,29 @@ class ASTNodeConvertor:
         self._gotos = []
         self._last_if = None
         self._patterns = {}
-    
+
     def convert(self, node):
         node_method = self._fetchMethod(node)
         n = node_method(node)
         self._fix_missing(n)
         self._go_to_labels(n)
-        
+
         return n
-    
-    def _go_to_labels(self, node: ast.AST|list):
+
+    def _go_to_labels(self, node: ast.AST | list):
         if self.current_label != None:
             self._labels[self.current_label].body.append(node)
 
-    def _fix_missing(self, node:ast.AST):
+    def _fix_missing(self, node: ast.AST):
         if isinstance(node, list):
             for x in node:
                 self._fix_missing(x)
         if isinstance(node, ast.AST):
             ast.fix_missing_locations(node)
 
-    def _fetchMethod(self, node:last.Node):
-        
-        method = 'convert_' + node.__class__.__name__
+    def _fetchMethod(self, node: last.Node):
+
+        method = "convert_" + node.__class__.__name__
         try:
             convertor = getattr(self, method)
         except AttributeError as ae:
@@ -61,7 +63,7 @@ class ASTNodeConvertor:
                 return self.convert_ULNotOp
 
             exit()
-        
+
         return convertor
 
     def get_typing(self, node: last.Node):
@@ -85,7 +87,7 @@ class ASTNodeConvertor:
         return keys, items
 
     def save_pattern(self, node, keys, items, outcome):
-        
+
         writ = PythonASTWriter()
         out = writ.visit(outcome)
         node = str(node.__class__.__name__)
@@ -96,31 +98,30 @@ class ASTNodeConvertor:
             self._patterns[node.__class__.__name__]["outcomes"].append(out)
         else:
             self._patterns[node.__class__.__name__] = {
-                "keys":[keys],
-                "items":[items],
-                "nodes":[node],
-                "outcomes":[out]
+                "keys": [keys],
+                "items": [items],
+                "nodes": [node],
+                "outcomes": [out],
             }
 
 
 class LuaNodeConvertor(ASTNodeConvertor):
-    
+
     def __init__(self):
         super().__init__()
 
-    def _super_from_callattr(self, node:ast.Call):
-        callfunc = \
-            ast.Attribute(value=ast.Call(func=ast.Name(id='super', ctx=ast.Load()), 
-                                         args=[], 
-                                         keywords=[]), 
-                          attr='__init__', 
-                          ctx=ast.Load())
-                          
-        return ast.Call(func=callfunc, 
-                        args=node.args, 
-                        keywords=[])
-    
-    def _check_for_super(self, node:FindableMethod):
+    def _super_from_callattr(self, node: ast.Call):
+        callfunc = ast.Attribute(
+            value=ast.Call(
+                func=ast.Name(id="super", ctx=ast.Load()), args=[], keywords=[]
+            ),
+            attr="__init__",
+            ctx=ast.Load(),
+        )
+
+        return ast.Call(func=callfunc, args=node.args, keywords=[])
+
+    def _check_for_super(self, node: FindableMethod):
         clss = self._classes_map[node.key]
         for arg in node.function.args.args:
             if arg.arg == "self":
@@ -131,30 +132,30 @@ class LuaNodeConvertor(ASTNodeConvertor):
                                 for base in clss.bases:
                                     if base.name.id == n.func.value.id:
                                         n = self._super_from_callattr(n)
-        
+
     def convert_str(self, node: str):
         node.replace("\n", ", ")
         return node
 
     def convert_float(self, node: float):
         return node
-    
-    def convert_int(self, node:int):
+
+    def convert_int(self, node: int):
         return node
 
     def convert_list(self, node: list):
         n = [self.convert(x) for x in node]
         return n
 
-    def convert_String(self, node:last.String) -> ast.Constant:
+    def convert_String(self, node: last.String) -> ast.Constant:
         n = ast.Constant(f"{node.s}", kind="s")
         return n
 
     def convert_NoneType(self, node: None):
         return ast.Constant(None, kind=None)
-    
-    def convert_Number(self, node:last.Number):
-        n = ast.Constant(node.n, kind='i')
+
+    def convert_Number(self, node: last.Number):
+        n = ast.Constant(node.n, kind="i")
         return n
 
     def convert_Chunk(self, node: last.Chunk) -> ast.Module:
@@ -165,9 +166,7 @@ class LuaNodeConvertor(ASTNodeConvertor):
         n = [self.convert(x) for x in node.body]
         return n
 
-    
-
-    def convert_Assign(self, node:last.Assign=None) -> ast.Assign:
+    def convert_Assign(self, node: last.Assign = None) -> ast.Assign:
         # Get left hand expressions as python asts
         targets = [self.convert(x) for x in node.targets]
         for target in targets:
@@ -176,30 +175,30 @@ class LuaNodeConvertor(ASTNodeConvertor):
                 target.ctx = ast.Store()
         values = [self.convert(x) for x in node.values]
         n = ast.Assign(targets=targets, value=values, type_comment=None)
-        
+
         return n
-        
-    def convert_While(self, node:last.While=None):
+
+    def convert_While(self, node: last.While = None):
         body = self.convert(node.body)
         test = self.convert(node.test)
         n = ast.While(test=test, body=body, orelse=None)
-        
+
         return n
-        
-    def convert_Do(self, node:last.Do=None) -> list[ast.AST]|None:
+
+    def convert_Do(self, node: last.Do = None) -> list[ast.AST] | None:
         items = []
         for n in node.body.body:
             items.append(self.convert(n))
-        
+
         return items
 
-    def convert_If(self, node:last.If=None):
+    def convert_If(self, node: last.If = None):
         test = self.convert(node.test)
         if isinstance(node.body, last.Chunk):
             body = [self.convert(x) for x in node.body.body]
         else:
             body = self.convert(node.body)
-        #orelse = self.convert(node.orelse)
+        # orelse = self.convert(node.orelse)
         if isinstance(node.orelse, list):
             orelse = [self.convert(x) for x in node.orelse]
         elif isinstance(node.orelse, last.Block):
@@ -210,13 +209,13 @@ class LuaNodeConvertor(ASTNodeConvertor):
         self._last_if = n
         return n
 
-    def convert_ElseIf(self, node:last.ElseIf=None):
+    def convert_ElseIf(self, node: last.ElseIf = None):
         test = self.convert(node.test)
         if isinstance(node.body, last.Chunk):
             body = [self.convert(x) for x in node.body.body]
         else:
             body = self.convert(node.body)
-        #orelse = self.convert(node.orelse)
+        # orelse = self.convert(node.orelse)
         if isinstance(node.orelse, list):
             orelse = [self.convert(x) for x in node.orelse]
         elif isinstance(node.orelse, last.ElseIf):
@@ -229,18 +228,20 @@ class LuaNodeConvertor(ASTNodeConvertor):
         self._last_if.orelse.append(n)
         return ""
 
-    def convert_Label(self, node:last.Label=None):
+    def convert_Label(self, node: last.Label = None):
         self.current_label = node.id
-        self._labels[node.id] = ast.FunctionDef(name=node.id.id, args=[], body=[], decorator_list=[], returns=None)
-    
-    def convert_Goto(self, node:last.Goto=None):
+        self._labels[node.id] = ast.FunctionDef(
+            name=node.id.id, args=[], body=[], decorator_list=[], returns=None
+        )
+
+    def convert_Goto(self, node: last.Goto = None):
         return ast.Call(func=ast.Name(id=node.label.id), args=[], keywords="GOTO")
 
-    def convert_Break(self, node:last.Break=None):
+    def convert_Break(self, node: last.Break = None):
         n = ast.Break()
         return n
 
-    def convert_Return(self, node:last.Return=None):
+    def convert_Return(self, node: last.Return = None):
         if isinstance(node.values, bool):
             kind = node.values
             value = True if node.values == True else False
@@ -250,35 +251,47 @@ class LuaNodeConvertor(ASTNodeConvertor):
             n = [x for x in n if x != None]
             v = n if len(n) > 1 else n
         n = ast.Return(value=v)
-        
+
         return n
 
-    def convert_Fornum(self, node:last.Fornum=None):
+    def convert_Fornum(self, node: last.Fornum = None):
         target = self.convert(node.target)
         start = self.convert(node.start)
         stop = self.convert(node.stop)
         step = self.convert(node.step)
         body = self.convert(node.body)
         orelse = []
-        n = ast.For(target=target, iter=ast.Call(func=ast.Name(id="range"), args=[start, stop, step], keywords=[]), body=body, orelse=orelse)
-        
+        n = ast.For(
+            target=target,
+            iter=ast.Call(
+                func=ast.Name(id="range"), args=[start, stop, step], keywords=[]
+            ),
+            body=body,
+            orelse=orelse,
+        )
+
         return n
 
-    def convert_Forin(self, node:last.Forin=None):
-        if len(node.targets) == 1 and node.targets[0].id == "kv" and isinstance(node.iter, last.Call) and node.iter.func.identifier in ["ipairs", "pairs"]:
-                node.targets = [last.Name(identifier="k"), last.Name(identifier="v")]
+    def convert_Forin(self, node: last.Forin = None):
+        if (
+            len(node.targets) == 1
+            and node.targets[0].id == "kv"
+            and isinstance(node.iter, last.Call)
+            and node.iter.func.identifier in ["ipairs", "pairs"]
+        ):
+            node.targets = [last.Name(identifier="k"), last.Name(identifier="v")]
 
         targets: list = self.convert(node.targets)
-        
+
         iter = self.convert(node.iter)
         body = self.convert(node.body)
         orelse = []
-        n = ast.For(target=targets, iter=iter,body=body, orelse=[])
-        
+        n = ast.For(target=targets, iter=iter, body=body, orelse=[])
+
         return n
 
     def convert_Args(self, node: list[last.Name, last.Index, last.Call]):
-        """ converts arguments `list[Expression]` to 
+        """converts arguments `list[Expression]` to
         ast.arguments.
         Args:
             node(list[last.Name|last.Expression]) : list of lua expressions
@@ -286,7 +299,7 @@ class LuaNodeConvertor(ASTNodeConvertor):
             ast.arguments object
         """
         items = []
-        
+
         for x in node:
             py = self.convert(x)
             if isinstance(py, ast.Name):
@@ -299,31 +312,43 @@ class LuaNodeConvertor(ASTNodeConvertor):
                 items.append(ast.arg(self.convert(x)))
 
         args = items
-        
-        return ast.arguments(posonlyargs=args, args=args, vararg=None, kw_defaults=[], kwarg=None, defaults=[], kwonlyargs=[])
 
-    def convert_funcArg(self, node: last.Name|last.Index):
+        return ast.arguments(
+            posonlyargs=args,
+            args=args,
+            vararg=None,
+            kw_defaults=[],
+            kwarg=None,
+            defaults=[],
+            kwonlyargs=[],
+        )
+
+    def convert_funcArg(self, node: last.Name | last.Index):
         if isinstance(node, last.Name):
             return self.convert_Name(node)
         elif isinstance(node, last.Index):
             return self.convert_Index(node)
 
-    def _is_import(self, node:last.Node):
-        return isinstance(node, last.Call) and isinstance(node.func, last.Name) and node.func.id == "require"
-    
-    def convert_Call(self, node: last.Call=None):
-        
+    def _is_import(self, node: last.Node):
+        return (
+            isinstance(node, last.Call)
+            and isinstance(node.func, last.Name)
+            and node.func.id == "require"
+        )
+
+    def convert_Call(self, node: last.Call = None):
+
         # check is pairs function
         if isinstance(node.func, last.Name) and node.func.id == "pairs":
             method_attr = ast.Attribute(
-            value=self.convert(node.args[0]),  # The object part as Python AST
-            attr="items",   # The method name as a string
-            ctx=ast.Load()         # Context is load because we're accessing an attribute
+                value=self.convert(node.args[0]),  # The object part as Python AST
+                attr="items",  # The method name as a string
+                ctx=ast.Load(),  # Context is load because we're accessing an attribute
             )
             call_node = ast.Call(
-            func=method_attr,
-            args=self.convert_Args([]),
-            keywords=[]  # Lua doesn't have keyword arguments
+                func=method_attr,
+                args=self.convert_Args([]),
+                keywords=[],  # Lua doesn't have keyword arguments
             )
             return call_node
 
@@ -333,44 +358,45 @@ class LuaNodeConvertor(ASTNodeConvertor):
         n = ast.Call(func=func, args=args, keywords=keywords)
         return n
 
-    
-
-    def convert_Invoke(self, node:last.Invoke) -> ast.Call:
+    def convert_Invoke(self, node: last.Invoke) -> ast.Call:
         keys, items = self.get_typing(node)
         source = self.convert(node.source)
         args = self.convert_Args(node.args)
         func = self.convert(node.func)
-        n = ast.Call(func=ast.Attribute(value=source, attr=func), args=args, keywords=[])
+        n = ast.Call(
+            func=ast.Attribute(value=source, attr=func), args=args, keywords=[]
+        )
         self.save_pattern(node, keys, items, n)
         return n
 
-    def convert_Function(self, node:last.Function=None):
+    def convert_Function(self, node: last.Function = None):
         name = self.convert(node.name)
         args = self.convert_Args(node.args)
         body = self.convert(node.body)
         n = ast.FunctionDef(name=name, args=args, body=body)
-        
+
         return n
 
-    def convert_LocalFunction(self, node:last.LocalFunction=None):
-        
+    def convert_LocalFunction(self, node: last.LocalFunction = None):
+
         name = self.convert(node.name)
         args = self.convert_Args(node.args)
         body = self.convert(node.body)
         n = ast.FunctionDef(name=name, args=args, body=body)
-        
+
         return n
-    
-    def convert_Super(self, node:last.Invoke):
-        callfunc = ast.Attribute(value=ast.Call(func=ast.Name(id='super', 
-                                                              ctx=ast.Load()), 
-                                                args=[], 
-                                                keywords=[]), 
-                                 attr='__init__', 
-                                 ctx=ast.Load())
+
+    def convert_Super(self, node: last.Invoke):
+        callfunc = ast.Attribute(
+            value=ast.Call(
+                func=ast.Name(id="super", ctx=ast.Load()), args=[], keywords=[]
+            ),
+            attr="__init__",
+            ctx=ast.Load(),
+        )
         return ast.Call(func=callfunc, args=self.convert_Args(node.args), keywords=[])
-    
-    def convert_Initializer(self, node:last.Initializer):
+
+    def convert_Initializer(self, node: last.Initializer):
         key = None
         src = self.convert(node.source)
         if isinstance(src, ast.Name):
@@ -385,18 +411,20 @@ class LuaNodeConvertor(ASTNodeConvertor):
                     body.append(self.convert_Super(bnode))
                     continue
             body.append(self.convert(bnode))
-                
-        f =  ast.FunctionDef(name=self.convert(node.name),
-                               args=args,
-                               body=body,
-                               decorator_list=[],
-                               returns=None, 
-                               type_comment=None, 
-                               type_params=[])
+
+        f = ast.FunctionDef(
+            name=self.convert(node.name),
+            args=args,
+            body=body,
+            decorator_list=[],
+            returns=None,
+            type_comment=None,
+            type_params=[],
+        )
         self._to_find.append(FindableMethod(key=key, function=f))
         return f
 
-    def convert_Method(self, node:last.Method=last.Method):
+    def convert_Method(self, node: last.Method = last.Method):
         key = None
         src = self.convert(node.source)
         if isinstance(src, ast.Name):
@@ -416,23 +444,25 @@ class LuaNodeConvertor(ASTNodeConvertor):
         if name == "init":
             name == "__init__"
             body = self.convert_InitializerBody(node)
-        n = ast.FunctionDef(name=name, args=args, body=body, type_params=[], decorator_list=[])
+        n = ast.FunctionDef(
+            name=name, args=args, body=body, type_params=[], decorator_list=[]
+        )
         self._to_find.append(FindableMethod(key=key, function=n))
         return n
 
-    def convert_Nil(self, node: last.Nil=None):
+    def convert_Nil(self, node: last.Nil = None):
         n = ast.Constant(value=None, kind=None)
         return n
 
-    def convert_TrueExpr(self, node:last.TrueExpr=None):
+    def convert_TrueExpr(self, node: last.TrueExpr = None):
         n = ast.Constant(value=True, kind=bool)
         return n
 
-    def convert_FalseExpr(self, node:last.FalseExpr=None):
+    def convert_FalseExpr(self, node: last.FalseExpr = None):
         n = ast.Constant(value=False, kind=bool)
         return n
 
-    def convert_List(self, node:last.Table):
+    def convert_List(self, node: last.Table):
         l = ast.List(elts=[])
         for k, v in node.fields:
             l.elts.append(self.convert(v))
@@ -449,29 +479,29 @@ class LuaNodeConvertor(ASTNodeConvertor):
             d.values.append(v)
         return d
 
-    def convert_Table(self, node:last.Table=None):
+    def convert_Table(self, node: last.Table = None):
         if Is.List(node) == True:
             n = self.convert_List(node)
         else:
             n = self.convert_Dict(node)
-        
+
         return n
 
-    def convert_Field(self, node:last.Field=None) -> tuple[ast.AST]:
+    def convert_Field(self, node: last.Field = None) -> tuple[ast.AST]:
         n = (self.convert(node.key), self.convert(node.value))
-        
+
         return n
 
-    def convert_Dots(self, node:last.Dots=None):
+    def convert_Dots(self, node: last.Dots = None):
         n = ast.Constant(..., kind="Ellipsis")
         return n
 
-    def convert_AnonymousFunction(self, node:last.AnonymousFunction=None):
-        
+    def convert_AnonymousFunction(self, node: last.AnonymousFunction = None):
+
         args = self.convert(node.args)
         body = self.convert(node.body)
         n = ast.Lambda(args, body)
-        
+
         return n
 
     def convert_UnaryOp(self, node: last.UnaryOp) -> ast.UnaryOp:
@@ -484,7 +514,7 @@ class LuaNodeConvertor(ASTNodeConvertor):
             n = ast.Call(func=ast.Name(id="not"), args=[operand], keywords=[])
         if isinstance(node, last.ULengthOP):
             n = ast.Call(func=ast.Name(id="len"), args=[operand], keywords=[])
-        
+
         return n
 
     def convert_LoOp(self, node: last.LoOp) -> ast.IfExp:
@@ -494,9 +524,9 @@ class LuaNodeConvertor(ASTNodeConvertor):
         right = self.convert(node.right)
         if isinstance(right, ast.Name):
             right.ctx = ast.Load()
-        
+
         n = ast.IfExp(test=right, body=right, orelse=left)
-        
+
         return n
 
     def convert_AriOp(self, node: last.AriOp) -> ast.Compare:
@@ -520,10 +550,10 @@ class LuaNodeConvertor(ASTNodeConvertor):
             n = ast.BinOp(left, ast.Mod(), right)
         elif isinstance(node, last.ExpoOp):
             n = ast.BinOp(left, ast.Pow(), right)
-        
+
         return n
 
-    def convert_BitOp(self, node: last.BitOp) -> ast.Compare|ast.Constant| ast.Tuple:
+    def convert_BitOp(self, node: last.BitOp) -> ast.Compare | ast.Constant | ast.Tuple:
         left = self.convert(node.left)
         if isinstance(left, ast.Name):
             left.ctx = ast.Store()
@@ -533,14 +563,14 @@ class LuaNodeConvertor(ASTNodeConvertor):
         if isinstance(node, last.BAndOp):
             n = ast.BinOp(left=left, op=ast.BitAnd(), right=right)
         elif isinstance(node, last.BOrOp):
-            n =  ast.BinOp(left=left, op=ast.BitOr(), right=right)
+            n = ast.BinOp(left=left, op=ast.BitOr(), right=right)
         elif isinstance(node, last.BXorOp):
-            n = ast.BinOp(left, ast.BitXor(), right) 
+            n = ast.BinOp(left, ast.BitXor(), right)
         elif isinstance(node, last.BShiftLOp):
             n = ast.BinOp(left, ast.LShift(), right)
         elif isinstance(node, last.BShiftROp):
             n = ast.BinOp(left, ast.RShift(), right)
-        
+
         return n
 
     def convert_RelOp(self, node: last.RelOp) -> ast.Compare:
@@ -562,10 +592,10 @@ class LuaNodeConvertor(ASTNodeConvertor):
             n = ast.BinOp(left=left, op=ast.Gt(), right=right)
         elif isinstance(node, last.GreaterOrEqThanOp):
             n = ast.BinOp(left=left, op=ast.GtE(), right=right)
-        
+
         return n
 
-    def convert_BinaryOp(self, node:last.BinaryOp=None):
+    def convert_BinaryOp(self, node: last.BinaryOp = None):
         if isinstance(node, last.RelOp):
             n = self.convert_RelOp(node)
         elif isinstance(node, last.AriOp):
@@ -574,9 +604,9 @@ class LuaNodeConvertor(ASTNodeConvertor):
             n = self.convert_BitOp(node)
         elif isinstance(node, last.LoOp):
             n = self.convert_LoOp(node)
-        
+
         return n
-        
+
     def convert_OP(self, node: last.Op):
         if isinstance(node, last.RelOp):
             n = self.convert_RelOp(node)
@@ -586,22 +616,22 @@ class LuaNodeConvertor(ASTNodeConvertor):
             n = self.convert_BitOp(node)
         elif isinstance(node, last.LoOp):
             n = self.convert_LoOp(node)
-        
+
         return n
 
-    def convert_UnaryOp(self, node:last.UnaryOp=None):
+    def convert_UnaryOp(self, node: last.UnaryOp = None):
         n = self.convert_OP(node)
-        
+
         return n
 
-    def convert_Name(self, node:last.Name=None):
+    def convert_Name(self, node: last.Name = None):
         if node.id == "true":
             return ast.Constant(value=True)
         elif node.id == "false":
             return ast.Constant(value=False)
-        
+
         n = ast.Name(id=node.id)
-        
+
         return n
 
     def convert_valueName(self, node):
@@ -613,8 +643,8 @@ class LuaNodeConvertor(ASTNodeConvertor):
             return nn
         elif isinstance(n, last.String):
             return n.id
-        
-    def convert_Index(self, node:last.Index=None):
+
+    def convert_Index(self, node: last.Index = None):
         if node.notation == last.IndexNotation.DOT:
             value = self.convert(node.value)
             idx = self.convert(node.idx)
@@ -623,33 +653,33 @@ class LuaNodeConvertor(ASTNodeConvertor):
             _value = last.to_lua_source(node.value)
             _idx = last.to_lua_source(node.idx)
             n = ast.Name(id=f"{_value}[{_idx}]", kind="i")
-        
+
         return n
 
-    def convert_Varargs(self, node:last.Varargs=None):
+    def convert_Varargs(self, node: last.Varargs = None):
         n = ast.Constant(value="*args", kind="*args")
-        
+
         return n
 
-    def convert_Repeat(self, node:last.Repeat=None):
+    def convert_Repeat(self, node: last.Repeat = None):
         body = self.convert(node.body)
         t = ast.If(test=self.convert(node.test), body=ast.Break(), orelse=[])
         body.append(t)
         n = ast.While(test=ast.Constant(value=True), body=body, orelse=None)
-        
+
         return n
 
-    def convert_SemiColon(self, node:last.SemiColon=None):
+    def convert_SemiColon(self, node: last.SemiColon = None):
         n = ast.Name(id=";", ctx=ast.Load())
         return n
-    
+
     def convert_ULNotOp(self, node: last.ULNotOp):
         operand = self.convert(node.operand)
         n = ast.UnaryOp(operand=operand, op=ast.Not())
         return n
 
     def convert_OrLoOp(self, node: last.OrLoOp):
-        """ name = Expression1 or Expression2
+        """name = Expression1 or Expression2
         name = expression1 if expression1 else expression2
         Args:
             node (last.OrLoOp): _description_
@@ -657,10 +687,14 @@ class LuaNodeConvertor(ASTNodeConvertor):
         Returns:
             _type_: _description_
         """
-        return ast.IfExp(test=self.convert(node.left),body=self.convert(node.left), orelse=self.convert(node.right))
-        
+        return ast.IfExp(
+            test=self.convert(node.left),
+            body=self.convert(node.left),
+            orelse=self.convert(node.right),
+        )
+
     def convert_LocalAssign(self, node: last.LocalAssign):
-        """ just redirect to Assign statement
+        """just redirect to Assign statement
 
         Args:
             node (last.LocalAssign): the local assign node
@@ -685,104 +719,121 @@ class LuaNodeConvertor(ASTNodeConvertor):
         operand = self.convert(node.operand)
         return ast.UnaryOp(op=ast.USub(), operand=operand)
 
-    def convert_MultOp(self, node:last.MultOp):
+    def convert_MultOp(self, node: last.MultOp):
         left = self.convert(node.left)
         right = self.convert(node.right)
         return ast.BinOp(left, ast.Mult(), right)
 
     def convert_bool(self, node):
         return node
-    
+
     def convert_AndLoOp(self, node: last.AndLoOp):
-        return ast.BinOp(left=self.convert(node.left), op=ast.BitAnd(), right=self.convert(node.right))
+        return ast.BinOp(
+            left=self.convert(node.left),
+            op=ast.BitAnd(),
+            right=self.convert(node.right),
+        )
 
-    def convert_AddOp(self, node:last.AddOp):
-        return ast.BinOp(left=self.convert(node.left), right=self.convert(node.right), op=ast.Add())
-    
-    def convert_FloatDivOp(self, node:last.FloatDivOp):
-        return ast.BinOp(left=self.convert(node.left), right=self.convert(node.right), op=ast.Div())
+    def convert_AddOp(self, node: last.AddOp):
+        return ast.BinOp(
+            left=self.convert(node.left), right=self.convert(node.right), op=ast.Add()
+        )
 
-    def convert_SubOp(self, node:last.SubOp):
-        return ast.BinOp(left=self.convert(node.left), right=self.convert(node.right), op=ast.Sub())
-    
+    def convert_FloatDivOp(self, node: last.FloatDivOp):
+        return ast.BinOp(
+            left=self.convert(node.left), right=self.convert(node.right), op=ast.Div()
+        )
+
+    def convert_SubOp(self, node: last.SubOp):
+        return ast.BinOp(
+            left=self.convert(node.left), right=self.convert(node.right), op=ast.Sub()
+        )
+
     def convert_LessThanOp(self, node: last.LessThanOp):
-        return ast.BinOp(left=self.convert(node.left), right=self.convert(node.right), op=ast.Lt())
-    
-    def convert_Concat(self, node:last.Concat):
-        return ast.BinOp(left=self.convert(node.left), op=ast.Add(), right=self.convert(node.right))
+        return ast.BinOp(
+            left=self.convert(node.left), right=self.convert(node.right), op=ast.Lt()
+        )
 
-    def convert_LessOrEqThanOp(self, node:last.LessOrEqThanOp):
+    def convert_Concat(self, node: last.Concat):
+        return ast.BinOp(
+            left=self.convert(node.left), op=ast.Add(), right=self.convert(node.right)
+        )
+
+    def convert_LessOrEqThanOp(self, node: last.LessOrEqThanOp):
         return ast.Compare(
             left=self.convert(node.left),
             ops=[ast.LtE()],
-            comparators=[self.convert(node.right)])
-    
-    def convert_ULengthOP(self, node: last.ULengthOP):
-        return ast.Call(func=ast.Name(id="len"), args=[self.convert(node.operand)], keywords=[])
+            comparators=[self.convert(node.right)],
+        )
 
-    def convert_NotEqToOp(self, node:last.LessOrEqThanOp):
+    def convert_ULengthOP(self, node: last.ULengthOP):
+        return ast.Call(
+            func=ast.Name(id="len"), args=[self.convert(node.operand)], keywords=[]
+        )
+
+    def convert_NotEqToOp(self, node: last.LessOrEqThanOp):
         return ast.Compare(
             left=self.convert(node.left),
             ops=[ast.NotEq()],
-            comparators=[self.convert(node.right)]
+            comparators=[self.convert(node.right)],
         )
-    
-    def convert_GreaterThanOp(self, node:last.GreaterThanOp):
+
+    def convert_GreaterThanOp(self, node: last.GreaterThanOp):
         return ast.Compare(
             left=self.convert(node.left),
             ops=[ast.Gt()],
-            comparators=[self.convert(node.right)]
+            comparators=[self.convert(node.right)],
         )
-    
-    def convert_GreaterOrEqThanOp(self, node:last.GreaterOrEqThanOp):
+
+    def convert_GreaterOrEqThanOp(self, node: last.GreaterOrEqThanOp):
         return ast.Compare(
             left=self.convert(node.left),
             ops=[ast.GtE()],
-            comparators=[self.convert(node.right)]
-            )
+            comparators=[self.convert(node.right)],
+        )
 
-    def convert_ModOp(self, node:last.ModOp):
+    def convert_ModOp(self, node: last.ModOp):
         return ast.Compare(
             left=self.convert(node.left),
             ops=[ast.Mod()],
-            comparators=[self.convert(node.right)]
-            )
+            comparators=[self.convert(node.right)],
+        )
 
-    def convert_ExpoOp(self, node:last.ExpoOp):
+    def convert_ExpoOp(self, node: last.ExpoOp):
         return ast.Compare(
             left=self.convert(node.left),
             ops=[ast.Pow()],
-            comparators=[self.convert(node.right)]
+            comparators=[self.convert(node.right)],
         )
-    
-    #/////////////////////////////////////////////////////////////////////
-    #  NEW NODES
-    #/////////////////////////////////////////////////////////////////////
 
-    def convert_Base(self, node:last.Base) -> ClassBase:
+    # /////////////////////////////////////////////////////////////////////
+    #  NEW NODES
+    # /////////////////////////////////////////////////////////////////////
+
+    def convert_Base(self, node: last.Base) -> ClassBase:
         return ClassBase(name=node.name)
 
-    def convert_Constructor(self, node:last.Constructor) -> ast.ClassDef:
+    def convert_Constructor(self, node: last.Constructor) -> ast.ClassDef:
         c = ast.ClassDef(
-            name=node.name, 
+            name=node.name,
             bases=[self.convert(x) for x in node.bases],
-            keywords=[], 
-            body=[], 
-            decorator_list=[], 
-            type_params=[]
+            keywords=[],
+            body=[],
+            decorator_list=[],
+            type_params=[],
         )
 
         self._classes.append(c)
         self._classes_map[node.name] = c
-        
+
         return c
-    
+
     def convert_ForEnumerate(self, node: last.ForEnumerate):
-        
+
         iter_call = ast.Call(
-            func=ast.Name(id="enumerate", ctx=ast.Load()), 
-            args=self.convert_Args([node.iterator]), 
-            keywords=[]
+            func=ast.Name(id="enumerate", ctx=ast.Load()),
+            args=self.convert_Args([node.iterator]),
+            keywords=[],
         )
 
         return ast.For(
@@ -790,25 +841,19 @@ class LuaNodeConvertor(ASTNodeConvertor):
             iter=iter_call,
             body=[self.convert(x) for x in node.body],
             orelse=[],
-            type_comment=None
-        )
-    
-    def convert_InstanceMethodCall(self, node:last.InstanceMethodCall):
-    
-        call_func = ast.Attribute(
-            value=self.convert(node.source), 
-            attr=node.func.id, 
-            ctx=ast.Store()
+            type_comment=None,
         )
 
-        return ast.Call(
-            func=call_func, 
-            args=self.convert_Args(node.args), 
-            keywords=[]
+    def convert_InstanceMethodCall(self, node: last.InstanceMethodCall):
+
+        call_func = ast.Attribute(
+            value=self.convert(node.source), attr=node.func.id, ctx=ast.Store()
         )
-    
-    def convert_Require(self, node:last.Require) -> ast.ImportFrom|ast.Import:
-        
+
+        return ast.Call(func=call_func, args=self.convert_Args(node.args), keywords=[])
+
+    def convert_Require(self, node: last.Require) -> ast.ImportFrom | ast.Import:
+
         def getdelim(string):
             if "/" in string:
                 return "/"
@@ -817,65 +862,57 @@ class LuaNodeConvertor(ASTNodeConvertor):
             if "\\" in string:
                 return "\\"
             return "$"
-        
+
         # incase its just a require statement
-        
+
         if not len(node.args) >= 1:
             return ""
-        
+
         delim = getdelim(node.args[0])
         parts = node.args[0].split(delim) if delim != "$" else node.args[0]
-        
+
         if isinstance(parts, str):
             return ast.Import(names=[ast.alias(name=parts[0])])
         elif len(parts) == 2:
             module, name = parts[0], ast.alias(name=parts[1])
-            
-            return ast.ImportFrom(
-                module=module, 
-                names=[name]
-            )
-        
+
+            return ast.ImportFrom(module=module, names=[name])
+
         elif len(parts) >= 3:
             xparts = parts[:-1]
             module = ".".join(xparts)
             name = ast.alias(name=xparts[-1])
-            
-            return ast.ImportFrom(
-                module=module, 
-                names=[name]
-            )
-             
+
+            return ast.ImportFrom(module=module, names=[name])
+
     def convert_MetaTable(self, node: last.MetaTable) -> ast.Name:
         return ast.Name(id=f"self.__class__")
 
-    def convert_TableConstructor(self, node:last.TableConstructor) -> ast.Call:
-        
+    def convert_TableConstructor(self, node: last.TableConstructor) -> ast.Call:
+
         args = self.convert_Args(node.args)
-        n = ast.Call(
-            func=self.convert(node.func), 
-            args=args, 
-            keywords=[]
-        )
-        
+        n = ast.Call(func=self.convert(node.func), args=args, keywords=[])
+
         return n
 
-    def convert_SuperMethod(self, node:last.Invoke):
+    def convert_SuperMethod(self, node: last.Invoke):
         c = self.convert_MethodCall(node)
         return self._super_from_callattr(c)
 
-    def convert_MethodCall(self, node:last.Invoke) -> ast.Call:
-        
+    def convert_MethodCall(self, node: last.Invoke) -> ast.Call:
+
         # Convert the object part
         obj_python_ast = self.convert(node.source)
-        
+
         for subnode in ast.walk(obj_python_ast):
             if isinstance(subnode, ast.Name):
                 subnode.id = subnode.id.replace(":", ".")
-        
+
         # Convert the method name part
-        method_name = self.convert(node.func)  # This is the 'method' part of 'object:method'
-        
+        method_name = self.convert(
+            node.func
+        )  # This is the 'method' part of 'object:method'
+
         if isinstance(method_name, ast.Name):
             method_name = method_name.id
         elif isinstance(method_name, ast.Call):
@@ -883,13 +920,12 @@ class LuaNodeConvertor(ASTNodeConvertor):
                 method_name = method_name.func.id
             else:
                 method_name = method_name.func
-        
-        
+
         # Create an ast.Attribute for the 'object.method' part
         method_attr = ast.Attribute(
             value=obj_python_ast,  # The object part as Python AST
-            attr=method_name,   # The method name as a string
-            ctx=ast.Load()         # Context is load because we're accessing an attribute
+            attr=method_name,  # The method name as a string
+            ctx=ast.Load(),  # Context is load because we're accessing an attribute
         )
 
         # Convert the arguments part
@@ -900,7 +936,7 @@ class LuaNodeConvertor(ASTNodeConvertor):
         call_node = ast.Call(
             func=method_attr,
             args=args_python_ast,
-            keywords=[]  # Lua doesn't have keyword arguments
+            keywords=[],  # Lua doesn't have keyword arguments
         )
 
         return call_node
@@ -914,8 +950,7 @@ class LuaToPythonModule(LuaNodeConvertor):
         self.object = None
         self.o = None
 
-
-    def to_module(self, object: str|last.Chunk|Path|ast.AST):
+    def to_module(self, object: str | last.Chunk | Path | ast.AST):
         """takes a python object and returns an ast.Module
 
         Args:
@@ -927,7 +962,7 @@ class LuaToPythonModule(LuaNodeConvertor):
         lua_ast_object = self.ensure_object_is_iterable_nodes(object)
         python_ast_nodes = self.convert_object(lua_ast_object, [])
         total_nodes = self.assign_methods(python_ast_nodes)
-        
+
         for label, funcdef in self._labels.items():
             names = []
             for item in ast.walk(funcdef.body):
@@ -938,9 +973,9 @@ class LuaToPythonModule(LuaNodeConvertor):
             total_nodes.append(funcdef)
 
         m = ast.Module(body=self.cleanse_nodes(total_nodes), type_ignores=[])
-        
+
         return m
-    
+
     def ensure_object_is_iterable_nodes(self, object):
         if isinstance(object, str):
             string = object
@@ -952,7 +987,7 @@ class LuaToPythonModule(LuaNodeConvertor):
         elif isinstance(object, last.Chunk):
             o = object
 
-        #elif isinstance(object, list):
+        # elif isinstance(object, list):
         #    is_body = True
         #    for item in object:
         #        if not isinstance(item, last.Node):
@@ -963,8 +998,8 @@ class LuaToPythonModule(LuaNodeConvertor):
 
         elif isinstance(object, last.Block):
             o = last.Chunk(body=object)
-        
-        return o 
+
+        return o
 
     def convert_object(self, o, total_nodes):
         if isinstance(o, last.Block):
@@ -977,7 +1012,7 @@ class LuaToPythonModule(LuaNodeConvertor):
         for cl in self._to_find:
             try:
                 self._classes_map[cl.key].body.append(cl.function)
-                total_nodes = [x for x in total_nodes if x!=cl.function]
+                total_nodes = [x for x in total_nodes if x != cl.function]
             except:
                 pass
         return total_nodes
@@ -994,9 +1029,5 @@ class LuaToPythonModule(LuaNodeConvertor):
                     if isinstance(child, last.Node):
                         child = self.convert(child)
             retv.append(node)
-        
+
         return retv
-    
-
-    
-
