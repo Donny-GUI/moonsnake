@@ -5,6 +5,21 @@ from transpile.utility import directory_files_by_extension
 from transpile.tests import LuaToPythonTranspiler as LTPT
 from transpile.utility import unique_filename, set_extension
 from transpile.cli import parser
+import os
+from shutil import copytree
+
+
+def transpile_directory(directory:str, outputdir:str=None):
+
+    if outputdir == None:
+        outputdir = os.path.join(os.getcwd(), "output")
+    copytree(src=directory, dst=outputdir)
+    print(f"[Transpiling]: {directory}")
+    for root, dirs, files in os.walk(outputdir):
+        lua_paths = [os.path.join(root, f) for f in files if f.endswith(".lua")]
+        file_sources = [transpile_lua_file(x) for x in lua_paths]
+
+
 
 
 def lua_file_to_python_string(path: str) -> str:
@@ -23,7 +38,7 @@ def lua_file_to_python_string(path: str) -> str:
     return source.dump()
 
 
-def transpile_lua_file(path: str):
+def transpile_lua_file(path: str, outputfile:str=None):
 
     print(f"[Transpiling]: {path}")
     # init classes for transpiler
@@ -44,8 +59,12 @@ def transpile_lua_file(path: str):
         source.add(node, string)
 
     # write the file
-    with open(pyfile, "w") as f:
-        source.dump(f)
+    if outputfile == None:
+        with open(pyfile, "w") as f:
+            source.dump(f)
+    else:
+        with open(outputfile, "w") as f:
+            source.dump(f)
 
 
 def walk_transpile():
@@ -59,16 +78,21 @@ def node_test():
     for file in directory_files_by_extension():
         ltpt.transpile(file)
 
+
 def main():
     p = parser()
     args = p.parse_args()
+    if args.h:
+        p.print_help()
+    
+
+    if os.path.isdir(args.dest):
+        transpile_directory(args.dest, args.output)
+    elif os.path.isfile(arg.dest):
+        transpile_lua_file(args.dest, args.output)
 
 
 
 if __name__ == "__main__":
-    DEBUG = False
-    if not DEBUG:
-        main()
-    else:
-        node_test()
-    exit()
+    
+    main()

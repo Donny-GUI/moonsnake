@@ -34,6 +34,9 @@ class ASTNodeConvertor:
         self._last_if = None
         self._patterns = {}
 
+        self.anon_func_count = 0
+        self.anon_funcs = []
+
     def convert(self, node):
         node_method = self._fetchMethod(node)
         n = node_method(node)
@@ -109,6 +112,7 @@ class LuaNodeConvertor(ASTNodeConvertor):
 
     def __init__(self):
         super().__init__()
+
 
     def _super_from_callattr(self, node: ast.Call):
         callfunc = ast.Attribute(
@@ -497,10 +501,12 @@ class LuaNodeConvertor(ASTNodeConvertor):
         return n
 
     def convert_AnonymousFunction(self, node: last.AnonymousFunction = None):
-
+        self.anon_func_count += 1
         args = self.convert(node.args)
         body = self.convert(node.body)
-        n = ast.Lambda(args, body)
+        name = f"anonfunc{self.anon_func_count}"
+        n = ast.Call(func=ast.Name(id=name, ctx=ast.Load()), args=args, keywords=[])
+        self.anon_funcs.append(ast.FunctionDef(name=name, args=args, body=body))
 
         return n
 
@@ -811,7 +817,7 @@ class LuaNodeConvertor(ASTNodeConvertor):
     # /////////////////////////////////////////////////////////////////////
 
     def convert_Base(self, node: last.Base) -> Base:
-        return Base(name=node.name)
+        return ast.Name(id=node.name)
 
     def convert_Constructor(self, node: last.Constructor) -> ast.ClassDef:
         c = ast.ClassDef(
@@ -963,16 +969,22 @@ class LuaToPythonModule(LuaNodeConvertor):
         python_ast_nodes = self.convert_object(lua_ast_object, [])
         total_nodes = self.assign_methods(python_ast_nodes)
 
+        for func in self.anon_funcs:
+            total_nodes.insert(0, func)
+
         for label, funcdef in self._labels.items():
             names = []
+            
             for item in ast.walk(funcdef.body):
                 if isinstance(item, ast.Name):
                     names.append(item.id)
+            
             gl = ast.Global(names=names)
             funcdef.body.insert(0, gl)
             total_nodes.append(funcdef)
 
         m = ast.Module(body=self.cleanse_nodes(total_nodes), type_ignores=[])
+        
 
         return m
 

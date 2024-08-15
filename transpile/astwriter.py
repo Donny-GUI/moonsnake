@@ -924,7 +924,8 @@ class PythonASTWriter(NodeVisitor):
                     self.write(", ")
                 else:
                     comma = True
-                self.write(base.name)
+                if isinstance(base, Base):
+                    self.write(base.name)
 
             if node.keywords != [] and node.keywords != None:
                 comma = None
@@ -1440,7 +1441,7 @@ class PythonASTWriter(NodeVisitor):
         if isinstance(self._current_class.bases, list) == False:
             self._current_class.bases = [self._current_class.bases]
 
-        if node.func.value.id in [x.name.id for x in self._current_class.bases]:
+        if node.func.value.id in [x.id for x in self._current_class.bases]:
             node.func.value.id = self.fill("super()")
 
             if node.func.attr.id == "init":

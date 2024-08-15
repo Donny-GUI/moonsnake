@@ -10,20 +10,21 @@ Converts invoke extend objects into classes and invoked functions into methods f
 Yes
 Converts require statements to python local modules and has a very basic standard library mapping.
 
+### Does it handle super?
+Yes
+Converts object inheritance
+
+
+### Does it handle Anonymous functions
+Yes, long anonymous functions are converted into actual functions to use
+
 # Getting Started
 ```
 git clone https://gitub.com/Donny-GUI/less.git
 ```
 
-within your script
+## TODO
 
-```python3
-from less.tranpiler import LuaPythonTranpiler as lpt
-python_script = lpt.from_file("myfile.lua")
-```
-
-
-# Features
-Structural Pattern Matching
-- creates a match case block for optimizing the transpiler
-
+- Fix single line call asts so that it will give the proper indentation
+- fix lambda invokes
+- fix import [single letter]

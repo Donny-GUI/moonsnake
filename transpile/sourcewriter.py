@@ -214,7 +214,7 @@ def fix_bases_init(string: str, class_ast: ast.ClassDef) -> str:
     Returns:
         str: The modified string with corrected base class initializations.
     """
-    names = [base.name.id for base in class_ast.bases]
+    names = [base.id for base in class_ast.bases]
     for name in names:
         pat = name + r"\.[a-z]\(.*\)"
         argfind = extract_method_arguments(string)
