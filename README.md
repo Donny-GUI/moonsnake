@@ -1,6 +1,3 @@
-# Less
-
-Named after the Lunar Escape Systems (less) developed by NASA before the lunar rover was made.
 
 ## What is it?
 Lua any version to Python[3.12] source to source transpiler
