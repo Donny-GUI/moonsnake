@@ -20,7 +20,7 @@ Yes, long anonymous functions are converted into actual functions to use
 
 # Getting Started
 ```
-git clone https://gitub.com/Donny-GUI/less.git
+git clone https://gitub.com/Donny-GUI/moonsnake.git
 ```
 
 ## TODO
