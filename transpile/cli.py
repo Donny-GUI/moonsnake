@@ -10,19 +10,22 @@ MAGENTA = "\033[35m"
 BOLD = "\033[1m"
 DIM = "\033[2m"
 BLINK = "\033[5m"
+ST = "\033[9m"
+US = "\033[4m"
+L = ST+US
 E = "\033[0m"
 
 STAR1 = f"{BLINK}.{E}"
-STAR2 = f"{BLINK}*{E}"
-STAR3 = f"{BLINK}'{E}"
+STAR2 = f"{BLINK}⁕{E}"
+STAR3 = f"{BLINK}⊹{E}"
 
 moon = f"""   ''░░░▒▒╢╣╬▓▓▓▓▓▄,                                          
      `¡░░▒▒▒▒╢╢╢▓▓▓▓▓▄                       {STAR2}                
       '¡░░▒▒▒╢╢╣╣▓▓▓▓▓▓▌ç                {DIM}┳┳{BOLD}┓        ┏┓    ┓ {E}    {STAR3}
-      ''░░░▒]▒▒╫▓╣╣▓▓▓▓▓▓▓▄              {BOLD}┃┃┃┏┓┏┓┏┓  {BOLD}┗┓┏┓┏┓┃┏ ┏┓   {E}
+      ''░░░▒]▒▒╫▓╣╣▓▓▓▓▓▓▓▄              {BOLD}┃┃┃┏┓┏┓┏┓  {BOLD}┗┓┏┓┏┓┃┏ ┏┓{E}
        `└░░░▒▒▒▒╢╢╣▓▓▓▓▓▓▓▓▓,            {DIM}┛ ┗┗┛┗┛┛┗  ┗┛┛┗┗┻┛┗{BOLD} ┗{E}
-        ''░░░▒▒▒▒╬╣╣╫▓▓▓▓▓▓▓▓▌                                
-         '└░░░░▒▒▒▒╢╫▓▓▓▓▓▓▓▓▓█µ     {STAR1}    usage: moonsnake [PATH] [FLAGS]                      
+        ''░░░▒▒▒▒╬╣╣╫▓▓▓▓▓▓▓▓▌                                                  {STAR2}
+         '└░░░░▒▒▒▒╢╫▓▓▓▓▓▓▓▓▓█µ     {STAR1}     usage: moonsnake [PATH] [FLAGS]                      
           '░░░░▒▒╢▒╣╣▓▓▓▓▓▓▓▓▓▓▓▄                             
           ` ░░░░▒▒▒╢╢▓▓▓▓▓▓▓▓▓▓▓▓▌         Transpile Lua Files and Projects To Python3.11+                      
             └░▒▒▒▒▒▒╫▓╢▓▓▓▓▓▓▓▓▓▓▓▌                           
