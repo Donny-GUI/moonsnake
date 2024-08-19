@@ -7,16 +7,46 @@ from ast import Constant
 
 
 def is_singleton(obj):
+    """
+    Check if an object is a singleton.
+
+    Args:
+        obj: The object to check.
+
+    Returns:
+        True if the object is a singleton, False otherwise.
+    """
+    
+    # Check if the object is iterable and has less than 2 items.
+    # A singleton is an object that contains only one item.
     if iterable(obj) and len(obj) < 2:
         return True
 
 
 def iterable(obj):
+    """
+    Checks if an object is iterable.
+
+    Args:
+        obj: The object to check for iterability.
+
+    Returns:
+        True if the object is iterable, False otherwise.
+    """
     if isinstance(obj, (set, list, tuple)):
         return True
 
 
 def non_singleton_iterable(obj):
+    """
+    Checks if an object is a non-singleton iterable.
+
+    Args:
+        obj: The object to check for non-singleton iterability.
+
+    Returns:
+        True if the object is a non-singleton iterable, otherwise None.
+    """
     if is_singleton(obj):
         return
     if iterable(obj):
@@ -24,6 +54,15 @@ def non_singleton_iterable(obj):
 
 
 def attrhint(attr):
+    """
+    Generate a string of attribute hints for a given object.
+
+    Args:
+        attr (object): The object for which to generate attribute hints.
+
+    Returns:
+        str: A string of attribute hints in the format "name:hint", or "None" if the object has no attributes.
+    """
     hints = []
     try:
         for name, value in attr.__dict__.items():
@@ -34,6 +73,15 @@ def attrhint(attr):
 
 
 def itemsview(item):
+    """
+    Returns a string representation of a list of unique item hints from the given item.
+
+    Args:
+        item: An iterable of items to generate hints for.
+
+    Returns:
+        str: A comma-separated string of unique item hints.
+    """
     return ", ".join(list(set([itemhint(x) for x in item])))
 
 

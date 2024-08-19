@@ -387,7 +387,6 @@ class LuaNodeConvertor(ASTNodeConvertor):
         # Return the converted Block
         return n
 
-
     def convert_Assign(self, node: last.Assign = None) -> ast.Assign:
         """
         Converts an Assign node from lua to python.
@@ -404,20 +403,20 @@ class LuaNodeConvertor(ASTNodeConvertor):
         """
         # Convert each left hand target to a Python ast
         targets = [self.convert(x) for x in node.targets]
-        
+
         # If a target is a variable name, give it the context of storing
         for target in targets:
             if isinstance(target, ast.Name):
                 target.ctx = ast.Store()
-        
+
         # Convert each right hand value to a Python ast
         values = [self.convert(x) for x in node.values]
-        
+
         # Create the Assign ast with the converted targets and values
         n = ast.Assign(targets=targets, value=values, type_comment=None)
-        
+
         return n
-    
+
     def convert_While(self, node: last.While = None) -> ast.While:
         """
         Converts a While node from lua to python.
@@ -460,7 +459,6 @@ class LuaNodeConvertor(ASTNodeConvertor):
             items.append(self.convert(n))
 
         return items
-
 
     def convert_If(self, node: last.If = None):
         """
@@ -1239,6 +1237,15 @@ class LuaNodeConvertor(ASTNodeConvertor):
         return self._super_from_callattr(c)
 
     def convert_MethodCall(self, node: last.Invoke) -> ast.Call:
+        """
+        Converts a Lua method call to a Python AST Call object.
+
+        Parameters:
+        node (last.Invoke): The Lua method call node to convert.
+
+        Returns:
+        ast.Call: The converted Python AST Call object.
+        """
 
         # Convert the object part
         obj_python_ast = self.convert(node.source)

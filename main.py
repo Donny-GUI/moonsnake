@@ -5,8 +5,8 @@ from transpile.utility import directory_files_by_extension
 from transpile.tests import LuaToPythonTranspiler as LTPT
 from transpile.utility import unique_filename, set_extension
 from transpile.cli import parser
-import os
 from shutil import copytree
+import os
 
 
 def transpile_directory(directory: str, outputdir: str = None):
