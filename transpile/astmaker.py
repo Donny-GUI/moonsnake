@@ -11,6 +11,9 @@ from transpile.macros import Is
 from transpile.luaparser.astnodes import Base
 from transpile.patternmatch import LuaAstMatch
 from transpile.astwriter import PythonASTWriter
+from typing import Callable
+
+type Method = Callable
 
 
 # For finding all the methods and placing them in the correct class at the end
@@ -37,7 +40,16 @@ class ASTNodeConvertor:
         self.anon_func_count = 0
         self.anon_funcs = []
 
-    def convert(self, node):
+    def convert(self, node) -> ast.AST:
+        """
+        Convert a given node to its corresponding Python AST node.
+
+        Parameters:
+            node (Any): The node to be converted.
+
+        Returns:
+            ast.AST: The converted Python AST node.
+        """
         node_method = self._fetchMethod(node)
         n = node_method(node)
         self._fix_missing(n)
@@ -45,31 +57,66 @@ class ASTNodeConvertor:
 
         return n
 
-    def _go_to_labels(self, node: ast.AST | list):
+    def _go_to_labels(self, node: ast.AST | list) -> None:
+        """
+        Appends a given node to the body of the current label.
+
+        Args:
+            node (ast.AST | list): The node to be appended.
+
+        Returns:
+            None
+        """
         if self.current_label != None:
             self._labels[self.current_label].body.append(node)
 
     def _fix_missing(self, node: ast.AST):
+        """
+        Recursively fixes missing location information in the given AST node.
+
+        Args:
+            node (ast.AST): The node to fix missing location information for.
+
+        Returns:
+            None
+        """
         if isinstance(node, list):
             for x in node:
                 self._fix_missing(x)
         if isinstance(node, ast.AST):
             ast.fix_missing_locations(node)
 
-    def _fetchMethod(self, node: last.Node):
+    def _fetchMethod(self, node: last.Node) -> Method:
+        """
+        Fetches the conversion method for a given node.
+
+        Parameters:
+                node (last.Node): The node for which to fetch the conversion method.
+
+        Returns:
+                callable: The conversion method for the given node.
+        """
 
         method = "convert_" + node.__class__.__name__
         try:
             convertor = getattr(self, method)
         except AttributeError as ae:
-            if isinstance(node, last.ULNotOp):
-                return self.convert_ULNotOp
-
-            exit()
+            raise Exception("Could not find a conversion method for " + method)
 
         return convertor
 
     def get_typing(self, node: last.Node):
+        """
+        Recursively retrieves the typing information for a given node.
+
+        Args:
+            node (last.Node): The node for which to retrieve the typing information.
+
+        Returns:
+            tuple: A tuple containing two lists. The first list contains the keys of the node's attributes,
+                   and the second list contains the corresponding types.
+        """
+
         items = []
         keys = []
         for key, value in node.__dict__.items():
@@ -90,7 +137,18 @@ class ASTNodeConvertor:
         return keys, items
 
     def save_pattern(self, node, keys, items, outcome):
+        """
+        Saves a pattern for a given node.
 
+        Parameters:
+                node (Any): The node for which to save the pattern.
+                keys (list): A list of keys associated with the node.
+                items (list): A list of items associated with the node.
+                outcome (Any): The outcome of the node.
+
+        Returns:
+                None
+        """
         writ = PythonASTWriter()
         out = writ.visit(outcome)
         node = str(node.__class__.__name__)
@@ -113,8 +171,16 @@ class LuaNodeConvertor(ASTNodeConvertor):
     def __init__(self):
         super().__init__()
 
-
     def _super_from_callattr(self, node: ast.Call):
+        """
+        Creates a `super` call from a `call` attribute.
+
+        Args:
+            node (ast.Call): The `call` attribute.
+
+        Returns:
+            ast.Call: The `super` call.
+        """
         callfunc = ast.Attribute(
             value=ast.Call(
                 func=ast.Name(id="super", ctx=ast.Load()), args=[], keywords=[]
@@ -126,6 +192,15 @@ class LuaNodeConvertor(ASTNodeConvertor):
         return ast.Call(func=callfunc, args=node.args, keywords=[])
 
     def _check_for_super(self, node: FindableMethod):
+        """
+        Checks if a given node is a call to a superclass's __init__ method.
+
+        Args:
+            node (FindableMethod): The node to check.
+
+        Returns:
+            None
+        """
         clss = self._classes_map[node.key]
         for arg in node.function.args.args:
             if arg.arg == "self":
@@ -138,13 +213,40 @@ class LuaNodeConvertor(ASTNodeConvertor):
                                         n = self._super_from_callattr(n)
 
     def convert_str(self, node: str):
+        """
+        Converts a string by replacing newline characters with commas and spaces.
+
+        Args:
+            node (str): The string to be converted.
+
+        Returns:
+            str: The converted string.
+        """
         node.replace("\n", ", ")
         return node
 
-    def convert_float(self, node: float):
+    def convert_float(self, node: float) -> float:
+        """
+        Converts a float from lua to python.
+
+        Args:
+            node (float): The float to be converted.
+
+        Returns:
+            float: The converted float.
+        """
         return node
 
-    def convert_int(self, node: int):
+    def convert_int(self, node: int) -> int:
+        """
+        Converts an int from lua to python.
+
+        Args:
+            node (int): The int to be converted.
+
+        Returns:
+            int: The converted int.
+        """
         return node
 
     def convert_list(self, node: list):
@@ -283,7 +385,8 @@ class LuaNodeConvertor(ASTNodeConvertor):
             and isinstance(node.iter, last.Call)
             and node.iter.func.identifier in ["ipairs", "pairs"]
         ):
-            node.targets = [last.Name(identifier="k"), last.Name(identifier="v")]
+            node.targets = [last.Name(identifier="k"),
+                            last.Name(identifier="v")]
 
         targets: list = self.convert(node.targets)
 
@@ -345,7 +448,8 @@ class LuaNodeConvertor(ASTNodeConvertor):
         # check is pairs function
         if isinstance(node.func, last.Name) and node.func.id == "pairs":
             method_attr = ast.Attribute(
-                value=self.convert(node.args[0]),  # The object part as Python AST
+                # The object part as Python AST
+                value=self.convert(node.args[0]),
                 attr="items",  # The method name as a string
                 ctx=ast.Load(),  # Context is load because we're accessing an attribute
             )
@@ -505,8 +609,10 @@ class LuaNodeConvertor(ASTNodeConvertor):
         args = self.convert(node.args)
         body = self.convert(node.body)
         name = f"anonfunc{self.anon_func_count}"
-        n = ast.Call(func=ast.Name(id=name, ctx=ast.Load()), args=args, keywords=[])
-        self.anon_funcs.append(ast.FunctionDef(name=name, args=args, body=body))
+        n = ast.Call(func=ast.Name(id=name, ctx=ast.Load()),
+                     args=args, keywords=[])
+        self.anon_funcs.append(ast.FunctionDef(
+            name=name, args=args, body=body))
 
         return n
 
@@ -974,17 +1080,16 @@ class LuaToPythonModule(LuaNodeConvertor):
 
         for label, funcdef in self._labels.items():
             names = []
-            
+
             for item in ast.walk(funcdef.body):
                 if isinstance(item, ast.Name):
                     names.append(item.id)
-            
+
             gl = ast.Global(names=names)
             funcdef.body.insert(0, gl)
             total_nodes.append(funcdef)
 
         m = ast.Module(body=self.cleanse_nodes(total_nodes), type_ignores=[])
-        
 
         return m
 

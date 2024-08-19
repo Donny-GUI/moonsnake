@@ -9,20 +9,38 @@ import os
 from shutil import copytree
 
 
-def transpile_directory(directory:str, outputdir:str=None):
+def transpile_directory(directory: str, outputdir: str = None):
+    """
+    Transpiles a directory of Lua files to Python.
 
+    Args:
+            directory (str): The path to the directory containing Lua files to transpile.
+            outputdir (str, optional): The path to the output directory. Defaults to the current 
+                                       working directory plus "output".
+
+    Returns:
+            None
+    """
     if outputdir == None:
         outputdir = os.path.join(os.getcwd(), "output")
     copytree(src=directory, dst=outputdir)
     print(f"[Transpiling]: {directory}")
     for root, dirs, files in os.walk(outputdir):
-        lua_paths = [os.path.join(root, f) for f in files if f.endswith(".lua")]
+        lua_paths = [os.path.join(root, f)
+                     for f in files if f.endswith(".lua")]
         file_sources = [transpile_lua_file(x) for x in lua_paths]
 
 
-
-
 def lua_file_to_python_string(path: str) -> str:
+    """
+    Converts a Lua file at the specified path to a Python string.
+
+    Args:
+        path (str): The path to the Lua file to be converted.
+
+    Returns:
+        str: The converted Python string.
+    """
     print(f"[Transpiling]: {path}")
     # init classes for transpiler
     convert = LuaToPythonModule(None)
@@ -38,8 +56,17 @@ def lua_file_to_python_string(path: str) -> str:
     return source.dump()
 
 
-def transpile_lua_file(path: str, outputfile:str=None):
+def transpile_lua_file(path: str, outputfile: str = None):
+    """
+    Transpiles a Lua file at the specified path to a Python file.
 
+    Args:
+            path (str): The path to the Lua file to be transpiled.
+            outputfile (str, optional): The path to the output Python file. Defaults to None.
+
+    Returns:
+            None
+    """
     print(f"[Transpiling]: {path}")
     # init classes for transpiler
     convert = LuaToPythonModule(None)
@@ -68,6 +95,15 @@ def transpile_lua_file(path: str, outputfile:str=None):
 
 
 def walk_transpile():
+    """
+    Walks through all files in the specified directory and transpiles them from Lua to Python.
+
+    Args:
+        None
+
+    Returns:
+        None
+    """
     for file in directory_files_by_extension():
         print(file)
         transpile_lua_file(file)
@@ -80,19 +116,20 @@ def node_test():
 
 
 def main():
+
     p = parser()
     args = p.parse_args()
+
+    # if help flag is set, print help
     if args.h:
         p.print_help()
-    
 
     if os.path.isdir(args.dest):
         transpile_directory(args.dest, args.output)
-    elif os.path.isfile(arg.dest):
+    elif os.path.isfile(args.dest):
         transpile_lua_file(args.dest, args.output)
 
 
-
 if __name__ == "__main__":
-    
+
     main()
