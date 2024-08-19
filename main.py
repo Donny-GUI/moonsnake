@@ -5,8 +5,8 @@ from transpile.utility import directory_files_by_extension
 from transpile.tests import LuaToPythonTranspiler as LTPT
 from transpile.utility import unique_filename, set_extension
 from transpile.cli import parser
-from shutil import copytree
 import os
+from shutil import copytree
 
 
 def transpile_directory(directory: str, outputdir: str = None):
@@ -58,14 +58,14 @@ def lua_file_to_python_string(path: str) -> str:
 
 def transpile_lua_file(path: str, outputfile: str = None):
     """
-    Transpiles a Lua file at the specified path to a Python file.
+        Transpiles a Lua file at the specified path to a Python file.
 
-    Args:
-            path (str): The path to the Lua file to be transpiled.
-            outputfile (str, optional): The path to the output Python file. Defaults to None.
+        Args:
+                path (str): The path to the Lua file to be transpiled.
+                outputfile (str, optional): The path to the output Python file. Defaults to None.
 
-    Returns:
-            None
+        Returns:
+                None
     """
     print(f"[Transpiling]: {path}")
     # init classes for transpiler
