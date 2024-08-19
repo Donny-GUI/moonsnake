@@ -38,7 +38,6 @@ def parser():
                         required=False
                         ) 
     args = parser.parse_args(argv)
-    print(args)
     return parser
     
 parser()
