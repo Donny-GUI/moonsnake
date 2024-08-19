@@ -1,4 +1,40 @@
 """
+TL;DR: 
+    Converts transpile.luaparser.astnodes into python.ast AST.
+
+This module is responsible for taking the abstract syntax tree created by the
+Lua parser and converting it into a valid Python abstract syntax tree. The
+conversion is done by iterating over the lua tree and using the visitor pattern
+to generate the equivalent python asts.
+
+The conversion is done by defining a function for each type of lua node that
+needs to be converted. The function takes the lua node as an argument and returns
+the equivalent python ast.
+
+The conversion functions are then registered with the LuaAstMatch class which
+allows us to do pattern matching on the lua tree. The pattern matching uses the
+visitor pattern to call the correct conversion function for each type of node in
+the lua tree.
+
+The conversion functions are then used to convert the entire lua tree into a
+python ast. The python ast is then returned as a Module object.
+
+The conversion functions are also used to register methods with the visitor
+pattern. The visitor pattern is then used to traverse the lua tree and call the
+correct conversion function for each type of node. The conversion functions are
+used to generate the equivalent python asts for each type of node.
+
+The conversion functions are also used to register a method with the Findable
+class. The Findable class is then used to traverse the lua tree and find the
+correct conversion function for each type of node. The conversion functions are
+used to generate the equivalent python asts for each type of node.
+
+The conversion functions are also used to register a method with the
+FindableMethod class. The FindableMethod class is then used to traverse the lua
+tree and find the correct conversion function for each type of node. The
+conversion functions are used to generate the equivalent python asts for each
+type of node.
+
 converts transpile.luaparser.astnodes into python.ast AST 
 """
 
@@ -249,56 +285,196 @@ class LuaNodeConvertor(ASTNodeConvertor):
         """
         return node
 
-    def convert_list(self, node: list):
+    def convert_list(self, node: list) -> list:
+        """
+        Converts a list from lua to python.
+
+        Args:
+            node (list): The list to be converted.
+
+        Returns:
+            list: The converted list.
+        """
         n = [self.convert(x) for x in node]
         return n
 
     def convert_String(self, node: last.String) -> ast.Constant:
-        n = ast.Constant(f"{node.s}", kind="s")
+        """
+        Converts a string from lua to python.
+
+        Args:
+            node (last.String): The string to be converted.
+
+        Returns:
+            ast.Constant: The converted string.
+        """
+        # The string in lua is a string literal, so we need to add quotes
+        # around it to make it a string in python.
+        n = ast.Constant(f'"{node.s}"', kind="s")
         return n
 
-    def convert_NoneType(self, node: None):
+    def convert_NoneType(self, node: None) -> ast.Constant:
+        """
+        Converts a NoneType from lua to python.
+
+        Args:
+            node (NoneType): The NoneType to be converted.
+
+        Returns:
+            ast.Constant: The converted NoneType.
+        """
         return ast.Constant(None, kind=None)
 
-    def convert_Number(self, node: last.Number):
+    def convert_NoneType(self, node: last.Node) -> ast.Constant:
+        """
+        Converts a NoneType from lua to python.
+
+        Args:
+            node (Optional[last.NoneType]): The NoneType to be converted.
+
+        Returns:
+            ast.Constant: The converted NoneType.
+        """
+        return ast.Constant(None, kind=None)
+
+    def convert_Number(self, node: last.Number) -> ast.Constant:
+        """
+        Converts a number from lua to python.
+
+        Args:
+            node (last.Number): The number to be converted.
+
+        Returns:
+            ast.Constant: The converted number.
+        """
+        # The number in lua is a number literal, so we need to wrap it
+        # in a ast.Constant to make it a number in python.
         n = ast.Constant(node.n, kind="i")
         return n
 
     def convert_Chunk(self, node: last.Chunk) -> ast.Module:
+        """
+        Converts a Chunk from lua to python.
+
+        A Chunk is a collection of statements, so we will convert it to a ast.Module
+        which is a collection of statements.
+
+        Args:
+            node (last.Chunk): The Chunk to be converted.
+
+        Returns:
+            ast.Module: The converted Chunk.
+        """
         body = self.convert(node.body)
-        return ast.Module(body=body, type_ignores=[])
+        # A list of type ignore objects, empty for now
+        type_ignores = []
+        return ast.Module(body=body, type_ignores=type_ignores)
 
     def convert_Block(self, node: last.Block) -> list:
+        """
+        Converts a Block from lua to python.
+
+        A Block is a list of statements, so we will convert it to a list of Python asts.
+
+        Args:
+            node (last.Block): The Block to be converted.
+
+        Returns:
+            list: The converted Block.
+        """
+        # Convert each statement in the Block to a Python ast
         n = [self.convert(x) for x in node.body]
+        # Return the converted Block
         return n
+
 
     def convert_Assign(self, node: last.Assign = None) -> ast.Assign:
-        # Get left hand expressions as python asts
+        """
+        Converts an Assign node from lua to python.
+
+        An Assign node is a statement that assigns a value to one or more variables.
+        It has a list of left hand targets (variables) and a list of right hand values.
+        This function converts these targets and values to Python asts and creates an Assign ast.
+
+        Args:
+            node (last.Assign): The Assign node to be converted.
+
+        Returns:
+            ast.Assign: The converted Assign node.
+        """
+        # Convert each left hand target to a Python ast
         targets = [self.convert(x) for x in node.targets]
+        
+        # If a target is a variable name, give it the context of storing
         for target in targets:
-            # if it is a variable name, give context of storing
             if isinstance(target, ast.Name):
                 target.ctx = ast.Store()
+        
+        # Convert each right hand value to a Python ast
         values = [self.convert(x) for x in node.values]
+        
+        # Create the Assign ast with the converted targets and values
         n = ast.Assign(targets=targets, value=values, type_comment=None)
-
+        
         return n
+    
+    def convert_While(self, node: last.While = None) -> ast.While:
+        """
+        Converts a While node from lua to python.
 
-    def convert_While(self, node: last.While = None):
+        A While node is a loop that executes its body until its test evaluates to false.
+        This function converts the test and body of the While node to Python asts and
+        creates a While ast.
+
+        Args:
+            node (last.While): The While node to be converted.
+
+        Returns:
+            ast.While: The converted While node.
+        """
+        # Convert the body of the While loop to a Python ast
         body = self.convert(node.body)
+        # Convert the test of the While loop to a Python ast
         test = self.convert(node.test)
+        # Create the While ast with the converted test and body
         n = ast.While(test=test, body=body, orelse=None)
 
         return n
 
     def convert_Do(self, node: last.Do = None) -> list[ast.AST] | None:
+        """
+        Converts a Do node from lua to python.
+
+        A Do node is a collection of statements, so we will convert it to a list of Python asts.
+        This function converts each statement in the Do node to a Python ast and
+        returns the list of converted asts.
+
+        Args:
+            node (last.Do): The Do node to be converted.
+
+        Returns:
+            list[ast.AST] | None: The converted Do node.
+        """
         items = []
         for n in node.body.body:
             items.append(self.convert(n))
 
         return items
 
+
     def convert_If(self, node: last.If = None):
+        """
+        Converts an If node from lua to python.
+
+        This function takes an If node as input, converts its test and body to Python asts,
+        and creates an If ast. The function also handles the orelse clause of the If node.
+
+        Args:
+            node (last.If): The If node to be converted.
+
+        Returns:
+            ast.If: The converted If node.
+        """
         test = self.convert(node.test)
         if isinstance(node.body, last.Chunk):
             body = [self.convert(x) for x in node.body.body]
@@ -316,6 +492,18 @@ class LuaNodeConvertor(ASTNodeConvertor):
         return n
 
     def convert_ElseIf(self, node: last.ElseIf = None):
+        """
+        Converts an ElseIf node from lua to python.
+
+        This function takes an ElseIf node as input, converts its test and body to Python asts,
+        and creates an If ast. The function also handles the orelse clause of the ElseIf node.
+
+        Args:
+            node (last.ElseIf): The ElseIf node to be converted.
+
+        Returns:
+            str: An empty string.
+        """
         test = self.convert(node.test)
         if isinstance(node.body, last.Chunk):
             body = [self.convert(x) for x in node.body.body]
@@ -335,12 +523,33 @@ class LuaNodeConvertor(ASTNodeConvertor):
         return ""
 
     def convert_Label(self, node: last.Label = None):
+        """
+        Converts a Label node from lua to python.
+
+        This function takes a Label node as input, sets the current label to the node's id,
+        and creates a FunctionDef ast with the label's id as its name.
+
+        Args:
+            node (last.Label): The Label node to be converted.
+
+        Returns:
+            None
+        """
         self.current_label = node.id
         self._labels[node.id] = ast.FunctionDef(
             name=node.id.id, args=[], body=[], decorator_list=[], returns=None
         )
 
     def convert_Goto(self, node: last.Goto = None):
+        """
+        Converts a Goto node from lua to python.
+
+        Args:
+            node (last.Goto): The Goto node to be converted.
+
+        Returns:
+            ast.Call: The converted Goto node.
+        """
         return ast.Call(func=ast.Name(id=node.label.id), args=[], keywords="GOTO")
 
     def convert_Break(self, node: last.Break = None):
@@ -348,6 +557,15 @@ class LuaNodeConvertor(ASTNodeConvertor):
         return n
 
     def convert_Return(self, node: last.Return = None):
+        """
+        Converts a Return node from lua to python.
+
+        Args:
+            node (last.Return): The Return node to be converted.
+
+        Returns:
+            ast.Return: The converted Return node.
+        """
         if isinstance(node.values, bool):
             kind = node.values
             value = True if node.values == True else False
@@ -361,6 +579,15 @@ class LuaNodeConvertor(ASTNodeConvertor):
         return n
 
     def convert_Fornum(self, node: last.Fornum = None):
+        """
+        Converts a Fornum node from lua to python.
+
+        Args:
+            node (last.Fornum): The Fornum node to be converted.
+
+        Returns:
+            ast.For: The converted Fornum node.
+        """
         target = self.convert(node.target)
         start = self.convert(node.start)
         stop = self.convert(node.stop)
@@ -1055,7 +1282,7 @@ class LuaNodeConvertor(ASTNodeConvertor):
 
 
 class LuaToPythonModule(LuaNodeConvertor):
-    def __init__(self, patmat: LuaAstMatch = None):
+    def __init__(self):
         super().__init__()
         self.total_nodes = []
         self.string = ""
@@ -1126,6 +1353,15 @@ class LuaToPythonModule(LuaNodeConvertor):
         return total_nodes
 
     def assign_methods(self, total_nodes):
+        """
+        Assigns methods to their respective classes.
+
+        Args:
+            total_nodes: A list of nodes to be processed.
+
+        Returns:
+            A list of nodes with methods assigned to their respective classes.
+        """
         for cl in self._to_find:
             try:
                 self._classes_map[cl.key].body.append(cl.function)
@@ -1148,3 +1384,10 @@ class LuaToPythonModule(LuaNodeConvertor):
             retv.append(node)
 
         return retv
+
+
+def lua_to_python_ast(object: str | last.Chunk | Path | ast.AST) -> ast.Module:
+    """converts a lua object to a python ast"""
+
+    l = LuaToPythonModule()
+    return l.to_module(object)
