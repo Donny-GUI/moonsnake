@@ -45,8 +45,7 @@ moon = f"""   ''░░░▒▒╢╣╬▓▓▓▓▓▄,
              '░░░▒▒▒▒▒▒▒▒▒▒▒╢▓▓▓▓▓▓▓▓██U                      
          , `░¿░░░░▒▒▒▓╣╣╢▒╣╢▓▓▓▓▓▓▓▓███                       
          ',=░░░░░░▒▒▒╣╢╣╣▓╣▓▓▓▓▓▓▓▓███▀                       
-         `░░░░░░░░▒▒▒▒▒╣▓▓▓▓▓▓▓▓▓▓▓███                                     
-"""
+         `░░░░░░░░▒▒▒▒▒╣▓▓▓▓▓▓▓▓▓▓▓███"""
 
 def print_title():
     print(moon)
@@ -69,13 +68,14 @@ def parser():
         allow_abbrev=True,
         exit_on_error=False)
     parser.print_help = lambda: print_title()
-    parser.add_argument(metavar="PATH",
-                        action="store",
-                        dest="dest",
-                        help="path to target directory or file",
+    parser.add_argument("path", 
+                        type=str, 
+                        nargs="?",
+                        help='A path to the target.',
                         )
     parser.add_argument('-o',
                         '-output-path',
+                        default=None,
                         action="store_const",
                         help="flag for specifying the output directory or path, if none is given one will be made",
                         required=False
@@ -86,7 +86,6 @@ def parser():
                         action='store_true',
                         required=False
                         )
-    args = parser.parse_args(argv)
     return parser
 
 

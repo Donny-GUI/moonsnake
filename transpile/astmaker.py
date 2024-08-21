@@ -1,42 +1,4 @@
-"""
-TL;DR: 
-    Converts transpile.luaparser.astnodes into python.ast AST.
 
-This module is responsible for taking the abstract syntax tree created by the
-Lua parser and converting it into a valid Python abstract syntax tree. The
-conversion is done by iterating over the lua tree and using the visitor pattern
-to generate the equivalent python asts.
-
-The conversion is done by defining a function for each type of lua node that
-needs to be converted. The function takes the lua node as an argument and returns
-the equivalent python ast.
-
-The conversion functions are then registered with the LuaAstMatch class which
-allows us to do pattern matching on the lua tree. The pattern matching uses the
-visitor pattern to call the correct conversion function for each type of node in
-the lua tree.
-
-The conversion functions are then used to convert the entire lua tree into a
-python ast. The python ast is then returned as a Module object.
-
-The conversion functions are also used to register methods with the visitor
-pattern. The visitor pattern is then used to traverse the lua tree and call the
-correct conversion function for each type of node. The conversion functions are
-used to generate the equivalent python asts for each type of node.
-
-The conversion functions are also used to register a method with the Findable
-class. The Findable class is then used to traverse the lua tree and find the
-correct conversion function for each type of node. The conversion functions are
-used to generate the equivalent python asts for each type of node.
-
-The conversion functions are also used to register a method with the
-FindableMethod class. The FindableMethod class is then used to traverse the lua
-tree and find the correct conversion function for each type of node. The
-conversion functions are used to generate the equivalent python asts for each
-type of node.
-
-converts transpile.luaparser.astnodes into python.ast AST 
-"""
 
 import ast
 import transpile.luaparser.ast as last
@@ -50,6 +12,11 @@ from transpile.astwriter import PythonASTWriter
 from typing import Callable
 
 type Method = Callable
+
+AccessingAttribute = ast.Load()
+AssigningValue = ast.Store()
+ValueAsArgument = ast.Load()
+RightHandValue = ast.Load()
 
 
 # For finding all the methods and placing them in the correct class at the end
@@ -310,7 +277,7 @@ class LuaNodeConvertor(ASTNodeConvertor):
         """
         # The string in lua is a string literal, so we need to add quotes
         # around it to make it a string in python.
-        n = ast.Constant(f'"{node.s}"', kind="s")
+        n = ast.Constant(f'{node.s}', kind="s")
         return n
 
     def convert_NoneType(self, node: None) -> ast.Constant:
@@ -349,7 +316,7 @@ class LuaNodeConvertor(ASTNodeConvertor):
         """
         # The number in lua is a number literal, so we need to wrap it
         # in a ast.Constant to make it a number in python.
-        n = ast.Constant(node.n, kind="i")
+        n = ast.Constant(str(node.n), kind="i")
         return n
 
     def convert_Chunk(self, node: last.Chunk) -> ast.Module:
@@ -406,11 +373,14 @@ class LuaNodeConvertor(ASTNodeConvertor):
 
         # If a target is a variable name, give it the context of storing
         for target in targets:
-            if isinstance(target, ast.Name):
+            if hasattr(target, "ctx"):
                 target.ctx = ast.Store()
 
         # Convert each right hand value to a Python ast
         values = [self.convert(x) for x in node.values]
+        for val in values:
+            if hasattr(val, "ctx"):
+                val.ctx = ast.Load()
 
         # Create the Assign ast with the converted targets and values
         n = ast.Assign(targets=targets, value=values, type_comment=None)
@@ -595,8 +565,16 @@ class LuaNodeConvertor(ASTNodeConvertor):
         n = ast.For(
             target=target,
             iter=ast.Call(
-                func=ast.Name(id="range"), args=[start, stop, step], keywords=[]
-            ),
+                func=ast.Name(
+                    id="range", 
+                    ctx=ast.Load()
+                ), 
+                args=[
+                    start, 
+                    stop, 
+                    step
+                ], 
+                keywords=[]),
             body=body,
             orelse=orelse,
         )
@@ -697,7 +675,11 @@ class LuaNodeConvertor(ASTNodeConvertor):
         args = self.convert_Args(node.args)
         func = self.convert(node.func)
         n = ast.Call(
-            func=ast.Attribute(value=source, attr=func), args=args, keywords=[]
+            func=ast.Attribute(value=source, 
+                               attr=func, 
+                               ctx=ast.Load()), 
+            args=args, 
+            keywords=[]
         )
         self.save_pattern(node, keys, items, n)
         return n
@@ -776,7 +758,6 @@ class LuaNodeConvertor(ASTNodeConvertor):
             name = name.id
         if name == "init":
             name == "__init__"
-            body = self.convert_InitializerBody(node)
         n = ast.FunctionDef(
             name=name, args=args, body=body, type_params=[], decorator_list=[]
         )
@@ -830,14 +811,30 @@ class LuaNodeConvertor(ASTNodeConvertor):
         return n
 
     def convert_AnonymousFunction(self, node: last.AnonymousFunction = None):
+        
         self.anon_func_count += 1
-        args = self.convert(node.args)
-        body = self.convert(node.body)
-        name = f"anonfunc{self.anon_func_count}"
-        n = ast.Call(func=ast.Name(id=name, ctx=ast.Load()),
-                     args=args, keywords=[])
-        self.anon_funcs.append(ast.FunctionDef(
-            name=name, args=args, body=body))
+        args = self.convert_Args(node.args)
+        body = []
+        for nb in node.body.body:
+            body.append(self.convert(nb))
+        
+        name = f"lambda{self.anon_func_count}"
+        
+        n = ast.Call(
+            func=ast.Name(
+                id=name, 
+                ctx=ast.Load()),
+            args=[arg for arg in args.args], 
+            keywords=[]
+        )
+        
+        self.anon_funcs.append(
+            ast.FunctionDef(
+                name=name, 
+                args=args, 
+                body=body
+            )
+        )
 
         return n
 
@@ -963,11 +960,11 @@ class LuaNodeConvertor(ASTNodeConvertor):
 
     def convert_Name(self, node: last.Name = None):
         if node.id == "true":
-            return ast.Constant(value=True)
+            return ast.Constant(value=True, kind="bool")
         elif node.id == "false":
-            return ast.Constant(value=False)
+            return ast.Constant(value=False, kind="bool")
 
-        n = ast.Name(id=node.id)
+        n = ast.Name(id=node.id, ctx=ast.Load())
 
         return n
 
@@ -1007,8 +1004,7 @@ class LuaNodeConvertor(ASTNodeConvertor):
         return n
 
     def convert_SemiColon(self, node: last.SemiColon = None):
-        n = ast.Name(id=";", ctx=ast.Load())
-        return n
+        return ""
 
     def convert_ULNotOp(self, node: last.ULNotOp):
         operand = self.convert(node.operand)
@@ -1088,7 +1084,9 @@ class LuaNodeConvertor(ASTNodeConvertor):
 
     def convert_LessThanOp(self, node: last.LessThanOp):
         return ast.BinOp(
-            left=self.convert(node.left), right=self.convert(node.right), op=ast.Lt()
+            left=self.convert(node.left), 
+            right=self.convert(node.right), 
+            op=ast.Lt()
         )
 
     def convert_Concat(self, node: last.Concat):
@@ -1105,7 +1103,10 @@ class LuaNodeConvertor(ASTNodeConvertor):
 
     def convert_ULengthOP(self, node: last.ULengthOP):
         return ast.Call(
-            func=ast.Name(id="len"), args=[self.convert(node.operand)], keywords=[]
+            func=ast.Name(id="len", 
+                          ctx=ast.Load()), 
+            args=[self.convert(node.operand)], 
+            keywords=[]
         )
 
     def convert_NotEqToOp(self, node: last.LessOrEqThanOp):

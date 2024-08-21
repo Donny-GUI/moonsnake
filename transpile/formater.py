@@ -1,6 +1,140 @@
 import re
 import ast
 import os
+import ast
+from copy import copy
+import black
+from pathlib import Path
+
+indentation = r"^(?P<statement>.*:)\n(?P<indentation>(?:[ \t]+.*\n)*?)^(?P<next_statement>.*:)$"
+
+
+def insert_newline_after_operator(code: str):
+    # Define the regex pattern
+    pattern = re.compile(r'\n(\s*)(\w+)\s*=\s*(\w+)\s*([+\-*/%])\s(\d+)\s(\w+)')
+    
+    # Define the replacement pattern
+    replacement = r'\n\1\2 = \3 \4 \5 \n\1\6'
+    
+    # Perform the substitution
+    result = pattern.sub(replacement, code)
+    
+    return result
+
+
+def fix_digit_space(code:str):
+    pattern = r"(\s+)([A-Za-z][A-Za-z0-9_\s]*[\=\+-]+)(\s+\d+\s+)\s([^\n]+)"
+    for x in re.findall(pattern, code):
+        print(x)
+    return re.sub(pattern, r"\1\2\3\n\1\4", code)
+
+def apply_black(file_path:str):
+    black.format_file_in_place(Path(file_path), fast=False, mode=black.Mode())
+
+def any_except(exception:str):
+    return rf"[^{exception}]"
+
+def match_name(name:str, pattern):
+    return rf"(?P<{name}>{pattern})"
+
+def fix_digit_name_thing(code:str):
+    pattern = r"^(?P<indent>\s+)(?P<lhs>.+\d*\s)(?P<nextline>\w+)$"
+    for match in re.finditer(pattern, code):
+        indent = match.group("indent")
+        lhs = match.group("lhs")
+        nextline = match.group("nextline")
+        code.replace(code[match.start():match.end()], f"{indent}{lhs}\n{indent}{indent}{nextline}")
+        
+    return code
+
+def add_semicolons_to_statements(code):
+    # Define the regex pattern to match function calls
+    pattern = r'(\)\s*)(?=\w+\()'
+    
+    # Perform the substitution to add semicolons
+    result = re.sub(pattern, r'\1;', code)
+    
+    return result
+
+def fix_multicall_placement(code):
+    # Define the regex pattern
+    pattern = rf'(\s+)({optional(r"\w+\s*\=\s*")})\s*(\w+\(.+\))(\w+)'
+    
+    # Function to format the replacement
+    def replacement(match):
+        tab = match.group(1).strip()
+        optional_assign = match.group(2)
+        first_call = match.group(3).strip()
+        second_name = match.group(4).strip()
+        
+        # Return the first statement followed by a newline and the second statement indented
+        return f"{tab}{optional_assign}{first_call}\n{tab}{second_name}"
+
+    # Perform the substitution
+    return re.sub(pattern, replacement, code)
+
+def fix_same_line_calls_with_functions(code: str):
+    """
+    Fixes the same line calls with functions in the given code.
+
+    Args:
+        code (str): The code to fix.
+
+    Returns:
+        str: The code with the same line calls with functions formatted for proper indentation.
+    """
+    # Define the regex pattern
+    pattern = r'(def\s+\w+\s*\(.*?\)\s*:)(\w+\(.*?\))+'
+    
+    # Function to format the replacement
+    def replacement(match):
+        """
+        Formats the matched function definition and function calls for proper indentation.
+
+        Args:
+            match (re.Match): The regular expression match object.
+
+        Returns:
+            str: The formatted function definition and function calls.
+        """
+        # Extract the function definition and function calls from the match object
+        func_def = match.group(1)  # Function definition
+        calls = match.group(2)  # Function calls
+
+        # Use regular expressions to find all function calls within the calls string
+        formatted_calls = "\n    ".join(re.findall(r'\w+\(.*?\)', calls))
+
+        # Format the function definition and function calls with proper indentation
+        return f"{func_def}\n    {formatted_calls}"
+    
+    # Perform the substitution
+    return re.sub(pattern, replacement, code)
+
+def optional(pattern):
+    """
+    Returns a pattern that matches the provided pattern zero or one times.
+
+    Args:
+        pattern (str): The pattern to make optional.
+
+    Returns:
+        str: A pattern that matches the provided pattern zero or one times.
+    """
+    # The syntax (?:pattern) is a non-capturing group.
+    # The ? after the group makes it optional.
+    # The non-capturing group is used to avoid capturing the pattern.
+
+    return f"(?:{pattern})?"
+
+def fix_string_quote_errors(code):
+    double_quote = r"'" + r'"(.+)"' + r"'"
+    # Remove quotes around string literals
+    code = re.sub(double_quote, r"'\1'", code)
+
+    return code
+
+def fix_dot_call_errors(code):
+    return re.sub(r"([\w\.]+)\.\(", r"\1(", code)
 
 
 def fix_digit_no_space(string: str):
@@ -177,6 +311,9 @@ def extract_method_arguments(method_string: str) -> str:
         str: A string of the method arguments, or None if no arguments are found.
     """
     pattern = r"def\s+\w+\s*\(\s*([^)]+)\s*\):"
+
+    if isinstance(method_string, list):
+        return ""
     match = re.search(pattern, method_string)
     if match:
         return match.group(1)
@@ -197,6 +334,8 @@ def fix_supers(string: str) -> str:
     """
     superfind = r"\:[A-Z][a-z]+\.[a-z]+\(.*\)"
     argfind = extract_method_arguments(string)
+    if argfind == "":
+        return string 
     string = re.sub(superfind, f":\n        super().__init__({argfind})", string)
     return string
 
@@ -261,7 +400,16 @@ class SourceWriter:
         source = fix_kv_pairs(source)
         source = fix_ipairs(source)
         source = indexing_table_fix_string(source)
-        # source = digit_fix(source)
+        source = fix_string_quote_errors(source)
+        source = fix_dot_call_errors(source)
+        source = fix_same_line_calls_with_functions(source)
+        source = fix_multicall_placement(source)
+        source = add_semicolons_to_statements(source)
+        source = fix_digit_name_thing(source)
+        #source = digit_fix(source)
+        #source = fix_digit_space(source)
+        source = insert_newline_after_operator(source)
+        source = black.format_str(source)
         return source
 
     def add(self, node: ast.AST, source: str) -> None:
@@ -284,11 +432,18 @@ class SourceWriter:
         source = fix_kv_pairs(source)
         source = fix_ipairs(source)
         source = indexing_table_fix_string(source)
-        # source = digit_fix(source)
+        source = fix_string_quote_errors(source)
+        source = fix_dot_call_errors(source)
+        source = fix_same_line_calls_with_functions(source)
+        source = fix_multicall_placement(source)
+        source = add_semicolons_to_statements(source)
+        source = insert_newline_after_operator(source)
         self.source.append(source)
 
         with open("temp.py", "a") as f:
             f.write(source + "\n")
+            
+        apply_black("temp.py")
 
     def clear(self) -> None:
         """

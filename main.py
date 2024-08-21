@@ -1,6 +1,6 @@
 from transpile.astmaker import LuaToPythonModule
 from transpile.astwriter import PythonASTWriter
-from transpile.sourcewriter import SourceWriter
+from transpile.formater import SourceWriter
 from transpile.utility import directory_files_by_extension
 from transpile.tests import LuaToPythonTranspiler as LTPT
 from transpile.utility import unique_filename, set_extension
@@ -69,7 +69,7 @@ def transpile_lua_file(path: str, outputfile: str = None):
     """
     print(f"[Transpiling]: {path}")
     # init classes for transpiler
-    convert = LuaToPythonModule(None)
+    convert = LuaToPythonModule()
     writer = PythonASTWriter()
     source = SourceWriter()
 
@@ -118,16 +118,31 @@ def node_test():
 def main():
 
     p = parser()
+    
     args = p.parse_args()
-
+    
     # if help flag is set, print help
-    if args.h:
+    if "-h" in args or "--help" in args:
         p.print_help()
-
-    if os.path.isdir(args.dest):
-        transpile_directory(args.dest, args.output)
-    elif os.path.isfile(args.dest):
-        transpile_lua_file(args.dest, args.output)
+        
+    if args.path:
+        if os.path.exists(args.path):
+            if os.path.isdir(args.path):
+                transpile_directory(args.path, args.o)
+                exit()
+            elif os.path.isfile(args.path):
+                transpile_lua_file(args.path, args.o)
+                exit()
+        else:
+            p.print_help()
+            print(f"""\033[41m\n⚠️  Could not locate path: {args.path}\n\033[0m""")
+            exit()
+            
+    else:
+        p.print_help()
+        print("""\033[41m\n⚠️  Please provide a valid path\n\033[0m""")
+        
+        
 
 
 if __name__ == "__main__":

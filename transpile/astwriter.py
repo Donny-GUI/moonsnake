@@ -426,13 +426,19 @@ class NodeVisitor(object):
     }
 
     binop_rassoc = frozenset(("**",))
+    
+    nodes = []
 
     def visit(self, node):
         """Visit a node."""
+        self.nodes.append(node.__class__.__name__)
         method = "visit_" + node.__class__.__name__
         visitor = getattr(self, method, self.generic_visit)
         return visitor(node)
 
+    def tab(self):
+        self.write("    ")
+    
     def within(self, node_name: str):
         for x in self._inside:
             if x == node_name:
@@ -470,6 +476,21 @@ class NodeVisitor(object):
         """Adds a newline if it isn't the start of generated source"""
         if self._source:
             self.write("\n")
+    
+    def newline(self):
+        self.write("\n")
+    
+    def add_indentation(self):
+        self.write("    " * self._indent)
+    
+    def get_indentation(self):
+        return "    " * self._indent
+    
+    def dedent(self):
+        self._indent -= 1
+    
+    def indent(self):
+        self._indent += 1
 
     def fill(self, text=""):
         """Indent a piece of text and append it, according to the current
@@ -481,6 +502,13 @@ class NodeVisitor(object):
         """Add new source parts"""
         self._source.extend(text)
 
+    def complete(self, *text):
+        for line in text.split("\n"):
+            self.newline()
+            self.add_indentation()
+            self.write(line)
+        
+    
     def commentnode(self, node):
         self.write_comment(typehint(node))
 
@@ -626,22 +654,19 @@ class PythonASTWriter(NodeVisitor):
         self._inside_method = False
         self._current_class = None
         self._inside = []
-        self._last = []
+        self._last = [None, None]
 
-    def new_visit(self, node):
-        if isinstance(node, list):
-            return self.new_list_visit(node)
-        vis = PythonASTWriter()
-        return vis.visit(node)
+    def writelines(self, lines):
+        self._source.extend(lines)
 
-    def new_list_visit(self, node):
-        vis = PythonASTWriter()
-        src = []
-        for n in node:
-            if isinstance(n, list):
-                x = self.new_list_visit(n)
-            x = vis.visit(n)
-            src.append(x)
+    def splitlines(self, src:str):
+        return src.split("\n")
+    
+    def wrapline(self, line):
+        return self.get_indentation() + line + "\n"
+    
+    def to_lines(self, node):
+        return [self.wrapline(x) for x in self.splitlines(self.make(node))]
 
     def make(self, node):
         vis = PythonASTWriter()
@@ -661,25 +686,59 @@ class PythonASTWriter(NodeVisitor):
         if l != None:
             self._inside.pop(l)
 
+    def visit_list(self, node):
+        self._indent += 1
+        for x in node:
+            self.traverse(x)
+        self._indent -= 1
+
     def visit(self, node):
         """Outputs a source code string that, if converted back to an ast
         (using ast.parse) will generate an AST equivalent to *node*"""
         self._source = []
         self._inside = []
-        self.traverse(node)
-        s = ""
-        for x in self._source:
-            if isinstance(x, list):
-                x = self.make(x)
-            if isinstance(x, ast.AST):
-                x = self.make(x)
-            elif isinstance(x, (int, float, complex, type(None))):
-                x = str(x)
-            if x == None:
-                continue
-            s += x
-        return s
+        self.traverse(node)  
+        self._last.append(node.__class__.__name__)
+        return "".join(self._source)
+        
+    def write_block(self, block:list):
+        """write list of statments with a block
+        like this:
 
+        for i in range(10)<ENTRY POINT>
+            {block}
+
+        Args:
+            block (list): _description_
+        """
+        if block == []:
+            return
+        self.write(":")
+        self.newline()
+        self.indent()
+        for n in block:
+            self.writelines(self.to_lines(n))
+        self.dedent()
+    
+    def visit_orelse(self, node):
+        if node.orelse == [] or node.orelse == None:
+            return
+        self.fill("else")
+        self.write(":")
+        self.newline()
+        self.indent()
+        for b in node.orelse:
+            self.writelines(self.to_lines(b))
+        self.dedent()
+        
+    def visit_body(self, node):
+        self.write(":")
+        self.newline()
+        self.indent()
+        for b in node.body:
+            self.writelines(self.to_lines(b))
+        self.dedent()
+        
     def _write_arguments(self, node):
         """Write arguments when given a node
 
@@ -722,7 +781,7 @@ class PythonASTWriter(NodeVisitor):
             self._write_docstring(docstring)
             self.traverse(node.body[1:])
         else:
-            self.traverse(node.body)
+            self.visit_body(node)
 
     def visit_Module(self, node: ast.Module):
 
@@ -743,7 +802,11 @@ class PythonASTWriter(NodeVisitor):
 
         self.write(" -> ")
         self.traverse(node.returns)
-
+    
+    def visit_Base(self, node: Base):
+        print(node.name)
+        self.write(node.name)
+        
     def visit_Expr(self, node: ast.Expr):
         self.fill()
         self.set_precedence(_Precedence.YIELD, node.value)
@@ -812,7 +875,7 @@ class PythonASTWriter(NodeVisitor):
             self.traverse(node.value)
             if type_comment := self.get_type_comment(node):
                 self.write(type_comment)
-
+        
     def visit_AugAssign(self, node: ast.AugAssign):
         self.fill()
         self.traverse(node.target)
@@ -907,21 +970,16 @@ class PythonASTWriter(NodeVisitor):
             self.write(" from ")
             self.traverse(node.cause)
 
-    def do_visit_try(self, node):
+    def do_visit_try(self, node: ast.Try):
         self.fill("try")
-        with self.block():
-            self.traverse(node.body)
+        self.visit_body(node)
         for ex in node.handlers:
             self.traverse(ex)
         node.orelse = node.orelse if node.orelse != [] else None
-        if node.orelse != []:
-            self.fill("else")
-            with self.block():
-                self.traverse(node.orelse)
+        self.visit_orelse(node)
         if node.finalbody != []:
             self.fill("finally")
-            with self.block():
-                self.traverse(node.finalbody)
+            self.write_block(node.finalbody)
 
     def visit_Try(self, node: ast.Try):
         prev_in_try_star = self._in_try_star
@@ -985,8 +1043,7 @@ class PythonASTWriter(NodeVisitor):
 
                     self.traverse(e)
 
-        with self.block():
-            self.traverse(node.body)
+        self.visit_body(node)
 
         self.maybe_newline()
 
@@ -1001,8 +1058,7 @@ class PythonASTWriter(NodeVisitor):
     def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef):
         self._function_helper(node, "async def")
 
-    def _function_helper(self, node, fill_suffix):
-        self.fill()
+    def _function_helper(self, node:ast.FunctionDef, fill_suffix):
         try:
             for deco in node.decorator_list:
                 self.fill("@")
@@ -1030,8 +1086,9 @@ class PythonASTWriter(NodeVisitor):
         if node.returns:
             self.write(" -> ")
             self.traverse(node.returns)
-        with self.block(extra="\n"):
-            self.traverse(node.body)
+        
+        self.visit_body(node)
+        
 
     def _type_params_helper(self, type_params):
         if type_params is not None and len(type_params) > 0:
@@ -1063,34 +1120,26 @@ class PythonASTWriter(NodeVisitor):
     def visit_AsyncFor(self, node: ast.AsyncFor):
         self._for_helper("async for ", node)
 
-    def _for_helper(self, fill, node):
+    def _for_helper(self, fill, node: ast.For):
         self.fill(fill)
         self.set_precedence(_Precedence.TUPLE, node.target)
         self.traverse(node.target)
         self.write(" in ")
         self.traverse(node.iter)
-        with self.block(extra=self.get_type_comment(node)):
-            self.set_precedence(_Precedence.TEST, node.body)
-            self.traverse(node.body)
-        if node.orelse != [] and node.orelse != None:
-            self.fill("else")
-            with self.block("\n"):
-                self.set_precedence(_Precedence.TEST, node.orelse)
-                self.traverse(node.orelse)
-
+        self.visit_body(node)
+        self.visit_orelse(node)
+        
     def visit_Elif(self, node: ast.If):
         self.fill("elif ")
         self.set_precedence(_Precedence.TEST, node.test)
         self.traverse(node.test)
-        with self.block(extra="\n"):
-            self.traverse(node.body)
+        self.visit_body(node)
 
     def visit_If(self, node: ast.If):
         self.fill("if ")
         self.set_precedence(_Precedence.TEST, node.test)
         self.traverse(node.test)
-        with self.block(extra="\n"):
-            self.traverse(node.body)
+        self.visit_body(node)
         orelse = []
         if isinstance(node.orelse, list):
             for subnode in node.orelse:
@@ -1100,32 +1149,29 @@ class PythonASTWriter(NodeVisitor):
                     orelse.append(subnode)
             if orelse != []:
                 self.fill("else")
-                with self.block(extra="\n"):
-                    for subnode in orelse:
-                        sn = self.make(subnode)
-                        self.fill(sn)
+                self.write(":")
+                self.newline()
+                self.indent()
+                for x in orelse:
+                    self.traverse(x)
+                self.dedent()
 
+                
     def visit_While(self, node: ast.While):
         self.fill("while ")
         self.traverse(node.test)
-        with self.block():
-            self.traverse(node.body)
-        if node.orelse and node.orelse != [] and node.orelse != None:
-            self.fill("else")
-            with self.block():
-                self.traverse(node.orelse)
-
+        self.visit_body(node)
+        self.visit_orelse(node)
+        
     def visit_With(self, node: ast.With):
         self.fill("with ")
         self.interleave(lambda: self.write(", "), self.traverse, node.items)
-        with self.block(extra=self.get_type_comment(node)):
-            self.traverse(node.body)
+        self.write_block(node.body)
 
     def visit_AsyncWith(self, node: ast.AsyncWith):
         self.fill("async with ")
         self.interleave(lambda: self.write(", "), self.traverse, node.items)
-        with self.block(extra=self.get_type_comment(node)):
-            self.traverse(node.body)
+        self.write_block(node.body)
 
     def _str_literal_helper(
         self, string, *, quote_types=_ALL_QUOTES, escape_special_whitespace=False
@@ -1293,7 +1339,14 @@ class PythonASTWriter(NodeVisitor):
         else:
             if node.kind == "u":
                 self.write("u")
-            self._write_constant(node.value)
+            elif node.kind == "s":
+                self._write_constant(node.value)
+                
+            elif node.kind == "i":
+                self.write(node.value)
+                return 
+            else:
+                self.write(str(node.value))
 
     def visit_List(self, node: ast.List):
 
@@ -1435,9 +1488,6 @@ class PythonASTWriter(NodeVisitor):
             self.write(f" {operator} ")
             self.traverse(node.right)
 
-    def visit_Base(self, node: Base):
-        self.fill(node.name)
-
     def visit_Compare(self, node: ast.Compare):
 
         with self.require_parens(_Precedence.CMP, node):
@@ -1465,7 +1515,8 @@ class PythonASTWriter(NodeVisitor):
             )
 
     def visit_Attribute(self, node: ast.Attribute):
-
+        if self._last[-1] == "Assign":
+            self.fill()
         self.set_precedence(_Precedence.ATOM, node.value)
         self.traverse(node.value)
         # Special case: 3.__abs__() is a syntax error, so if node.value
@@ -1501,9 +1552,6 @@ class PythonASTWriter(NodeVisitor):
 
     def visit_Call(self, node: ast.Call):
 
-        if self.independent():
-            self.maybe_newline()
-
         self.set_precedence(_Precedence.ATOM, node.func)
         # Goto Check
         if node.keywords and node.keywords[0] == "GOTO":
@@ -1521,10 +1569,14 @@ class PythonASTWriter(NodeVisitor):
             self.visit_SuperMethod(node)
             return
         if isinstance(node.func, ast.Attribute):
-            self.write(" ")
+            
             self.traverse(node.func.value)
             self.write(".")
-            self.traverse(node.func.attr)
+            if isinstance(node.func.attr, ast.Name):
+                self.traverse(node.func.attr)
+            else:
+                self.write(str(node.func.attr))
+                
             with self.delimit("(", ")"):
                 self.traverse(node.args)
             return
@@ -1574,12 +1626,13 @@ class PythonASTWriter(NodeVisitor):
                 self.traverse(case)
 
     def visit_arg(self, node: ast.arg):
-
-        self.write(node.arg)
-        # if node.annotation != []:
-        #    self.write(": ")
-        #    self.traverse(node.annotation)
-
+        if isinstance(node.arg, (ast.Attribute, ast.Call)):
+            self.traverse(node.arg)
+        elif isinstance(node.arg, (str, int, float, dict, list)):
+            self.write(str(node.arg))
+        else:
+            self.traverse(node.arg)
+        
     def visit_arguments(self, node: ast.arguments):
 
         first = True
@@ -1648,9 +1701,7 @@ class PythonASTWriter(NodeVisitor):
             if buffer:
                 self.write(" ", *buffer)
             self.set_precedence(_Precedence.TEST, node.body)
-            with self.block():
-                for item in node.body:
-                    self.fill(self.make(item).replace("\n", ""))
+            self.write_block(node.body)
 
     def visit_alias(self, node: ast.alias):
 
@@ -1671,8 +1722,7 @@ class PythonASTWriter(NodeVisitor):
         if node.guard:
             self.write(" if ")
             self.traverse(node.guard)
-        with self.block():
-            self.traverse(node.body)
+        self.write_block(node.body)
 
     def visit_MatchValue(self, node: ast.MatchValue):
         self.traverse(node.value)
