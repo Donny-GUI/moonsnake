@@ -1,6 +1,6 @@
 from transpile.astmaker import LuaToPythonModule
 from transpile.astwriter import PythonASTWriter
-from transpile.sourcewriter import SourceWriter
+from transpile.format import SourceWriter
 from transpile.utility import directory_files_by_extension
 from transpile.tests import LuaToPythonTranspiler as LTPT
 from transpile.utility import unique_filename, set_extension
@@ -121,8 +121,13 @@ def main():
     args = p.parse_args()
 
     # if help flag is set, print help
-    if args.h:
+    if args.help:
         p.print_help()
+
+    if args.dest == None:
+        p.print_help()
+        p.error("Please provide a file path to a lua directory or file")
+        
 
     if os.path.isdir(args.dest):
         transpile_directory(args.dest, args.output)

@@ -1,6 +1,6 @@
 from transpile.astmaker import LuaToPythonModule
 from transpile.astwriter import PythonASTWriter
-from transpile.sourcewriter import SourceWriter
+from transpile.format import SourceWriter
 from transpile.luaparser.ast import parse as luaparse, Chunk as LuaSourceAst
 from ast import parse as pythonparse
 import os

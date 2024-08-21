@@ -34,7 +34,7 @@ moon = f"""   ''░░░▒▒╢╣╬▓▓▓▓▓▄,
              '░░░░▒▒▒╢▒╣▓╣▓╢╫▓▓▓▓▓▓█▓∩ 
              '░░░░░▒▒▒╣▓▓▓▓╣╢╢╢╣╢▓▓▓▓▓     options:                  
               ',░░░░▒▒▒▒▓▓▓╣╢╢╢╣╢▓▓▓▓▓∩         -h, --help         show this help message and exit
-             ':'└░░░░▒▒╣╢▓▓▓╢╫╢╢╢▓▓▓█▓▌         -o, -output-path   specify the output directory or path                
+             ':'└░░░░▒▒╣╢▓▓▓╢╫╢╢╢▓▓▓█▓▌         -o, --output-path  specify the output directory or path                
              ```┌¡░░░░░▒╢╢▓▓▓▓▒▓▓▓▓▓██▓         -v, --verbose         
                '¡░░░░░▒▒▒▒╢▓▓▓▓▓▓▓▓▓▓██▌                      
                `¡░░░░▒▒▒╢╣▒▒▓▓▓▓▓▓▓▓▓██▌                      
@@ -65,17 +65,17 @@ def parser():
         epilog='Supports 3.12+ python and Lua 5+',
         usage='%(prog)s [PATH] [FLAGS]',
         argument_default=None,
-        add_help=True,
+        add_help=False,
         allow_abbrev=True,
         exit_on_error=False)
     parser.print_help = lambda: print_title()
     parser.add_argument(metavar="PATH",
-                        action="store",
+                        action="store_const",
                         dest="dest",
                         help="path to target directory or file",
                         )
     parser.add_argument('-o',
-                        '-output-path',
+                        '--output-path',
                         action="store_const",
                         help="flag for specifying the output directory or path, if none is given one will be made",
                         required=False
@@ -83,10 +83,17 @@ def parser():
     parser.add_argument('-v',
                         '--verbose',
                         dest="verbose",
+                        help='add verbosity',
                         action='store_true',
                         required=False
                         )
-    args = parser.parse_args(argv)
+    parser.add_argument('-h',
+                        '--help',
+                        help='show this menu',
+                        dest="help",
+                        action='store_true',
+                        required=False
+                        )
     return parser
 
 
