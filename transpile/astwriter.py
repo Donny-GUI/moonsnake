@@ -1032,6 +1032,8 @@ class PythonASTWriter(NodeVisitor):
                     comma = True
                 if isinstance(base, Base):
                     self.write(base.name)
+                elif isinstance(base, ast.Name):
+                    self.write(base.id)
 
             if node.keywords != [] and node.keywords != None:
                 comma = None

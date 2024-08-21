@@ -1166,13 +1166,9 @@ class LuaNodeConvertor(ASTNodeConvertor):
 
         return c
 
-    def convert_ForEnumerate(self, node: last.ForEnumerate):
-
-        iter_call = ast.Call(
-            func=ast.Name(id="enumerate", ctx=ast.Load()),
-            args=self.convert_Args([node.iterator]),
-            keywords=[],
-        )
+    def convert_ForEnumerate(self, node: last.ForEnumerate) -> ast.For:
+        iter_call = self.convert_Call(node.iterator)
+        iter_call.func.id = "enumerate"
 
         return ast.For(
             target=[self.convert(x) for x in node.targets],

@@ -1624,15 +1624,11 @@ class Builder:
                 )
 
         # ForEnumerate
-        if isinstance(node, Forin):
-            if (
-                isinstance(node.targets, list)
-                and isinstance(node.iter, Call)
-                and isinstance(node.iter.func, Name)
-            ):
+        if isinstance(node, Forin) and isinstance(node.targets, list) and len(node.targets) > 0 and isinstance(node.targets[0], Name):
+            if isinstance(node.iter, Call) and isinstance(node.iter.func, Name):
                 if node.iter.func.id == "ipairs":
                     return ForEnumerate(
-                        targets=node.targets, iterator=node.iter.func, body=node.body
+                        targets=[Name(identifier="k"), Name(identifier="v")], iterator=node.iter, body=node.body
                     )
 
         return self.iter_polymorph(node)
