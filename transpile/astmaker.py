@@ -7,8 +7,6 @@ from pathlib import Path
 from dataclasses import dataclass
 from transpile.macros import Is
 from transpile.luaparser.astnodes import Base
-from transpile.patternmatch import LuaAstMatch
-from transpile.astwriter import PythonASTWriter
 from typing import Callable
 
 type Method = Callable
@@ -107,67 +105,6 @@ class ASTNodeConvertor:
             raise Exception("Could not find a conversion method for " + method)
 
         return convertor
-
-    def get_typing(self, node: last.Node):
-        """
-        Recursively retrieves the typing information for a given node.
-
-        Args:
-            node (last.Node): The node for which to retrieve the typing information.
-
-        Returns:
-            tuple: A tuple containing two lists. The first list contains the keys of the node's attributes,
-                   and the second list contains the corresponding types.
-        """
-
-        items = []
-        keys = []
-        for key, value in node.__dict__.items():
-            if isinstance(value, last.Node):
-                items.append(str(value.__class__.__name__))
-                keys.append(key)
-                kmore, imore = self.get_typing(value)
-                items.extend(imore)
-                keys.extend(kmore)
-            else:
-                if key.startswith("_"):
-                    continue
-                else:
-                    if isinstance(value, str):
-                        keys.append(key)
-                        items.append("STRING")
-
-        return keys, items
-
-    def save_pattern(self, node, keys, items, outcome):
-        """
-        Saves a pattern for a given node.
-
-        Parameters:
-                node (Any): The node for which to save the pattern.
-                keys (list): A list of keys associated with the node.
-                items (list): A list of items associated with the node.
-                outcome (Any): The outcome of the node.
-
-        Returns:
-                None
-        """
-        writ = PythonASTWriter()
-        out = writ.visit(outcome)
-        node = str(node.__class__.__name__)
-        if node.__class__.__name__ in self._patterns.keys():
-            self._patterns[node.__class__.__name__]["keys"].append(keys)
-            self._patterns[node.__class__.__name__]["items"].append(items)
-            self._patterns[node.__class__.__name__]["nodes"].append(node)
-            self._patterns[node.__class__.__name__]["outcomes"].append(out)
-        else:
-            self._patterns[node.__class__.__name__] = {
-                "keys": [keys],
-                "items": [items],
-                "nodes": [node],
-                "outcomes": [out],
-            }
-
 
 class LuaNodeConvertor(ASTNodeConvertor):
 
@@ -670,7 +607,6 @@ class LuaNodeConvertor(ASTNodeConvertor):
         return n
 
     def convert_Invoke(self, node: last.Invoke) -> ast.Call:
-        keys, items = self.get_typing(node)
         source = self.convert(node.source)
         args = self.convert_Args(node.args)
         func = self.convert(node.func)
@@ -681,7 +617,6 @@ class LuaNodeConvertor(ASTNodeConvertor):
             args=args, 
             keywords=[]
         )
-        self.save_pattern(node, keys, items, n)
         return n
 
     def convert_Function(self, node: last.Function = None):
