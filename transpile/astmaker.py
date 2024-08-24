@@ -7,7 +7,7 @@ from pathlib import Path
 from dataclasses import dataclass
 from transpile.macros import Is
 from transpile.luaparser.astnodes import Base
-from typing import Callable
+from typing import Callable, Any
 
 type Method = Callable
 
@@ -15,6 +15,99 @@ AccessingAttribute = ast.Load()
 AssigningValue = ast.Store()
 ValueAsArgument = ast.Load()
 RightHandValue = ast.Load()
+
+
+def has_body(node: last.Node) -> bool:
+    """
+    Checks if a node has a non-empty body.
+
+    Args:
+        node (last.Node): The node to check.
+
+    Returns:
+        bool: True if the node has a non-empty body, None otherwise.
+    """
+    if hasattr(node, "body") and node.body != [] and node.body != None:
+        return True
+
+
+def is_class_definition(node: ast.ClassDef | Any):
+    """
+    Checks if a node is a class definition.
+
+    Args:
+        node (ast.AST): The node to check.
+
+    Returns:
+        bool: True if the node is a class definition, None otherwise.
+    """
+    if isinstance(node, ast.ClassDef):
+        return True
+
+
+def is_function_definition(node: ast.FunctionDef | Any):
+    """
+    Checks if a node is a function definition.
+
+    Args:
+        node (ast.AST): The node to check.
+
+    Returns:
+        bool: True if the node is a function definition, None otherwise.
+    """
+    if isinstance(node, ast.FunctionDef):
+        return True
+
+
+def is_call_and_anonymous_function(node: ast.Call | Any):
+    """
+    Checks if a node is an anonymous function.
+
+    Args:
+        node (ast.AST): The node to check.
+
+    Returns:
+        bool: True if the node is an anonymous function, None otherwise.
+    """
+    # Check if the node is a call expression and the first keyword argument
+    # has the name "ANON". the second keyword argument is the function body
+    if isinstance(node, ast.Call) and node.keywords and node.keywords[0].arg == "ANON":
+        return True
+
+
+def replace_with_output(listable: list, func: Any):
+    retv = []
+    for item in listable:
+        x = func(item)
+        if item:
+            retv.append(x)
+        else:
+            retv.append(item)
+
+    return retv
+
+
+def apply_to_attribute(class_: object, attribute: str, func: Any):
+    if hasattr(class_, attribute):
+        a = getattr(class_, attribute)
+        setattr(class_, attribute, func(a))
+    return class_
+
+
+def apply_to_attributes(class_: object, attributes: list[str], func: Any):
+    for attr in attributes:
+        class_ = apply_to_attribute(class_, attr, func)
+    return class_
+
+
+def apply_to_class_attributes(apply: Any, class_: object, attributes: list):
+    c = class_
+    for attr in attributes:
+        if hasattr(c, attr):
+            attribute = getattr(c, attr)
+            setattr(c, attr, apply(attribute))
+            
+    return c
 
 
 # For finding all the methods and placing them in the correct class at the end
@@ -124,20 +217,110 @@ class LuaNodeConvertor(ASTNodeConvertor):
     def __init__(self):
         super().__init__()
 
-    def convert_nodes(self, nodes: list[last.Node]):
-        nodes = self.assign_methods([self.convert(x) for x in nodes])
+    def _scope_anonymous_functions(self, nodes):
+        """
+        Finds anonymous functions in classes and moves them to the top of the class methods.
+
+        Args:
+            node (ast.ClassDef): The class to search for anonymous functions in.
+        """
+        def find_anonymous_in_class(node_: ast.ClassDef):
+            """
+            Finds anonymous functions in a class and moves them to the top of the class methods.
+
+            Args:
+                node (ast.ClassDef): The class to search for anonymous functions in.
+            """
+            if is_class_definition(node_):
+                for class_body_node in node_.body:
+                    if is_function_definition(class_body_node):
+                        for class_method_body_node in class_body_node.body:
+                            if is_call_and_anonymous_function(class_method_body_node):
+                                # Move the anonymous function to the top of the class methods
+                                class_body_node.body.insert(
+                                    0, class_method_body_node.keywords[1])
+                                # Remove the anonymous function from the class method
+                                class_method_body_node.keywords = []
+                                print("Anonymous function found in class method")
+
+            return node_
+
+        def find_anonymous_in_func(node_: ast.FunctionDef):
+            if is_function_definition(node_):
+                for func_body_node in node_.body:
+                    if is_call_and_anonymous_function(func_body_node):
+                        node_.body.insert(0, func_body_node.keywords[1])
+                        func_body_node.keywords = []
+                        print("Anonymous function found in function")
+            return node_
+
+        def fix_anonymous_functions(node_):
+            node_ = find_anonymous_in_func(node_)
+            node_ = find_anonymous_in_class(node_)
+            return node_
+
+        xnodes = [
+            apply_to_class_attributes(
+                fix_anonymous_functions, node, ["body", "orelse"]) 
+            for node in nodes
+        ]
+
+        return xnodes
+
+    def _globalize_labels(self, nodes: list[ast.AST]) -> list[ast.AST]:
+        """
+        Finds converted labels in the given nodes and moves the 
+        corresponding variable names to the top of the class method 
+        or function definitions as globals.
+
+        Args:
+            nodes (list[ast.AST]): The nodes to search for labels in.
+
+        Returns:
+            list[ast.AST]: The nodes with the labels moved to the top of the class methods.
+        """
         for label, funcdef in self._labels.items():
             names = []
 
+            # Walk the AST tree and find all the Names in the body of the function
             for item in ast.walk(funcdef.body):
                 if isinstance(item, ast.Name):
                     names.append(item.id)
 
+            # Create a Global node with the found names
             gl = ast.Global(names=names)
+
+            # Insert the Global node at the beginning of the function body
             funcdef.body.insert(0, gl)
+
+            # Add the function definition to the list of nodes
             nodes.append(funcdef)
-            
-        return nodes  
+
+        return nodes
+
+    def convert_nodes(self, nodes: list[last.Node]) -> list[ast.AST]:
+        """
+        Converts a list of lua nodes into a list of Python ASTs.
+
+        Args:
+            nodes (list[Node]): The list of lua nodes to convert
+
+        Returns:
+            list[ast.AST]: The converted list of Python ASTs
+        """
+        # First, we need to convert all the nodes into Python ASTs
+        nodes = [self.convert(x) for x in nodes]
+
+        # Then, we need to assign methods to the converted nodes
+        nodes = self.assign_methods(nodes)
+
+        # Next, we need to move any converted labels to the top of the class methods or functions
+        nodes = self._globalize_labels(nodes)
+
+        # Finally, we need to move any anonymous functions to the top of the class methods or functions
+        nodes = self._scope_anonymous_functions(nodes)
+
+        return nodes
 
     def _super_from_callattr(self, node: ast.Call):
         """
@@ -790,11 +973,11 @@ class LuaNodeConvertor(ASTNodeConvertor):
                 id=name,
                 ctx=ast.Load()),
             args=[arg for arg in args.args],
-            keywords=["ANON", ast.FunctionDef(name=name, 
-                                              args=args, 
+            keywords=["ANON", ast.FunctionDef(name=name,
+                                              args=args,
                                               body=body)]
         )
-        
+
         self.anon_funcs.append(
             ast.FunctionDef(
                 name=name,
@@ -1255,7 +1438,7 @@ class LuaNodeConvertor(ASTNodeConvertor):
         )
 
         return call_node
-    
+
     def assign_methods(self, total_nodes):
         """
         Assigns methods to their respective classes.
@@ -1273,7 +1456,6 @@ class LuaNodeConvertor(ASTNodeConvertor):
             except:
                 pass
         return total_nodes
-        
 
 
 class LuaToPythonModule(LuaNodeConvertor):
@@ -1296,7 +1478,7 @@ class LuaToPythonModule(LuaNodeConvertor):
         lua_ast_object = self.ensure_object_is_iterable_nodes(object)
         python_ast_nodes = self.convert_object(lua_ast_object, [])
         total_nodes = self.assign_methods(python_ast_nodes)
-        #for func in self.anon_funcs:
+        # for func in self.anon_funcs:
         #    total_nodes.insert(0, func)
 
         for label, funcdef in self._labels.items():
@@ -1313,7 +1495,6 @@ class LuaToPythonModule(LuaNodeConvertor):
         m = ast.Module(body=self.cleanse_nodes(total_nodes), type_ignores=[])
 
         return m
-
 
     def ensure_object_is_iterable_nodes(self, object):
         if isinstance(object, str):
