@@ -24,7 +24,18 @@ class FindableMethod:
     function: ast.FunctionDef
 
 
+class Comment:
+    def __init__(self, comment: str):
+        self.string = comment
+
+
+class MultiLineComment:
+    def __init__(self, comment: str) -> None:
+        self.string = comment
+
 # base class
+
+
 class ASTNodeConvertor:
     def __init__(self) -> None:
         self._classes = []
@@ -40,6 +51,7 @@ class ASTNodeConvertor:
 
         self.anon_func_count = 0
         self.anon_funcs = []
+        self.anon_map = {}
 
     def convert(self, node) -> ast.AST:
         """
@@ -106,10 +118,14 @@ class ASTNodeConvertor:
 
         return convertor
 
+
 class LuaNodeConvertor(ASTNodeConvertor):
 
     def __init__(self):
         super().__init__()
+
+    def convert_nodes(self, nodes: list[last.Node]):
+        return self.assign_methods([self.convert(x) for x in nodes])
 
     def _super_from_callattr(self, node: ast.Call):
         """
@@ -503,14 +519,14 @@ class LuaNodeConvertor(ASTNodeConvertor):
             target=target,
             iter=ast.Call(
                 func=ast.Name(
-                    id="range", 
+                    id="range",
                     ctx=ast.Load()
-                ), 
+                ),
                 args=[
-                    start, 
-                    stop, 
+                    start,
+                    stop,
                     step
-                ], 
+                ],
                 keywords=[]),
             body=body,
             orelse=orelse,
@@ -611,10 +627,10 @@ class LuaNodeConvertor(ASTNodeConvertor):
         args = self.convert_Args(node.args)
         func = self.convert(node.func)
         n = ast.Call(
-            func=ast.Attribute(value=source, 
-                               attr=func, 
-                               ctx=ast.Load()), 
-            args=args, 
+            func=ast.Attribute(value=source,
+                               attr=func,
+                               ctx=ast.Load()),
+            args=args,
             keywords=[]
         )
         return n
@@ -746,28 +762,32 @@ class LuaNodeConvertor(ASTNodeConvertor):
         return n
 
     def convert_AnonymousFunction(self, node: last.AnonymousFunction = None):
-        
+
         self.anon_func_count += 1
         args = self.convert_Args(node.args)
         body = []
+        possible_name = []
         for nb in node.body.body:
             body.append(self.convert(nb))
-        
+            possible_name.append(nb.__class__.__name__)
+
         name = f"lambda{self.anon_func_count}"
-        
+
         n = ast.Call(
             func=ast.Name(
-                id=name, 
+                id=name,
                 ctx=ast.Load()),
-            args=[arg for arg in args.args], 
-            keywords=[]
+            args=[arg for arg in args.args],
+            keywords=["ANON", ast.FunctionDef(name=name, 
+                                              args=args, 
+                                              body=body)]
         )
         
         self.anon_funcs.append(
             ast.FunctionDef(
-                name=name, 
-                args=args, 
-                body=body
+                name=name,
+                args=args,
+                body=body,
             )
         )
 
@@ -785,6 +805,11 @@ class LuaNodeConvertor(ASTNodeConvertor):
             n = ast.Call(func=ast.Name(id="len"), args=[operand], keywords=[])
 
         return n
+
+    def convert_Comment(self, node: last.Comment = None):
+        if node.is_multi_line == True:
+            return MultiLineComment(comment=node.s)
+        return Comment(comment=node.s)
 
     def convert_LoOp(self, node: last.LoOp) -> ast.IfExp:
         left = self.convert(node.left)
@@ -1019,8 +1044,8 @@ class LuaNodeConvertor(ASTNodeConvertor):
 
     def convert_LessThanOp(self, node: last.LessThanOp):
         return ast.BinOp(
-            left=self.convert(node.left), 
-            right=self.convert(node.right), 
+            left=self.convert(node.left),
+            right=self.convert(node.right),
             op=ast.Lt()
         )
 
@@ -1038,9 +1063,9 @@ class LuaNodeConvertor(ASTNodeConvertor):
 
     def convert_ULengthOP(self, node: last.ULengthOP):
         return ast.Call(
-            func=ast.Name(id="len", 
-                          ctx=ast.Load()), 
-            args=[self.convert(node.operand)], 
+            func=ast.Name(id="len",
+                          ctx=ast.Load()),
+            args=[self.convert(node.operand)],
             keywords=[]
         )
 
@@ -1218,6 +1243,25 @@ class LuaNodeConvertor(ASTNodeConvertor):
         )
 
         return call_node
+    
+    def assign_methods(self, total_nodes):
+        """
+        Assigns methods to their respective classes.
+
+        Args:
+            total_nodes: A list of nodes to be processed.
+
+        Returns:
+            A list of nodes with methods assigned to their respective classes.
+        """
+        for cl in self._to_find:
+            try:
+                self._classes_map[cl.key].body.append(cl.function)
+                total_nodes = [x for x in total_nodes if x != cl.function]
+            except:
+                pass
+        return total_nodes
+        
 
 
 class LuaToPythonModule(LuaNodeConvertor):
@@ -1240,9 +1284,9 @@ class LuaToPythonModule(LuaNodeConvertor):
         lua_ast_object = self.ensure_object_is_iterable_nodes(object)
         python_ast_nodes = self.convert_object(lua_ast_object, [])
         total_nodes = self.assign_methods(python_ast_nodes)
-
-        for func in self.anon_funcs:
-            total_nodes.insert(0, func)
+        total_nodes = self.insert_lambdas(total_nodes)
+        #for func in self.anon_funcs:
+        #    total_nodes.insert(0, func)
 
         for label, funcdef in self._labels.items():
             names = []
@@ -1258,6 +1302,19 @@ class LuaToPythonModule(LuaNodeConvertor):
         m = ast.Module(body=self.cleanse_nodes(total_nodes), type_ignores=[])
 
         return m
+
+    def insert_lambdas(self, total_nodes):
+        nodes = iter(nodes)
+        c = 0
+        added = 0
+        while True:
+            try:
+                node = next(nodes)
+            except StopIteration:
+                break
+            if isinstance(node, ast.Call):
+                
+                c += 1
 
     def ensure_object_is_iterable_nodes(self, object):
         if isinstance(object, str):
