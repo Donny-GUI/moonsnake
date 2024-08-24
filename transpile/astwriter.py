@@ -753,6 +753,7 @@ class PythonASTWriter(NodeVisitor):
         self.newline()
         self.indent()
         for b in node.orelse:
+            lines = self.to_lines(b)
             self.writelines(self.to_lines(b))
         self.dedent()
 
@@ -1189,14 +1190,9 @@ class PythonASTWriter(NodeVisitor):
                 else:
                     orelse.append(subnode)
             if orelse != []:
-                self.fill("else")
-                self.write(":")
-                self.newline()
-                self.indent()
-                for x in orelse:
-                    self.traverse(x)
-                self.dedent()
-
+                node.orelse = orelse 
+                self.visit_orelse(node)
+                
     def visit_While(self, node: ast.While):
         self.fill("while ")
         self.traverse(node.test)

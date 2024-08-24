@@ -125,7 +125,19 @@ class LuaNodeConvertor(ASTNodeConvertor):
         super().__init__()
 
     def convert_nodes(self, nodes: list[last.Node]):
-        return self.assign_methods([self.convert(x) for x in nodes])
+        nodes = self.assign_methods([self.convert(x) for x in nodes])
+        for label, funcdef in self._labels.items():
+            names = []
+
+            for item in ast.walk(funcdef.body):
+                if isinstance(item, ast.Name):
+                    names.append(item.id)
+
+            gl = ast.Global(names=names)
+            funcdef.body.insert(0, gl)
+            nodes.append(funcdef)
+            
+        return nodes  
 
     def _super_from_callattr(self, node: ast.Call):
         """
@@ -1284,7 +1296,6 @@ class LuaToPythonModule(LuaNodeConvertor):
         lua_ast_object = self.ensure_object_is_iterable_nodes(object)
         python_ast_nodes = self.convert_object(lua_ast_object, [])
         total_nodes = self.assign_methods(python_ast_nodes)
-        total_nodes = self.insert_lambdas(total_nodes)
         #for func in self.anon_funcs:
         #    total_nodes.insert(0, func)
 
@@ -1303,18 +1314,6 @@ class LuaToPythonModule(LuaNodeConvertor):
 
         return m
 
-    def insert_lambdas(self, total_nodes):
-        nodes = iter(nodes)
-        c = 0
-        added = 0
-        while True:
-            try:
-                node = next(nodes)
-            except StopIteration:
-                break
-            if isinstance(node, ast.Call):
-                
-                c += 1
 
     def ensure_object_is_iterable_nodes(self, object):
         if isinstance(object, str):
