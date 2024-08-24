@@ -1,6 +1,5 @@
 from transpile.astmaker import LuaToPythonModule
 from transpile.astwriter import PythonASTWriter
-from transpile.formater import SourceWriter
 from transpile.luaparser.ast import parse as luaparse, Chunk as LuaSourceAst
 from transpile.dependency_checker import DependencyVisitor
 from ast import parse as pythonparse
@@ -81,7 +80,6 @@ class LuaToPythonTranspiler:
     def __init__(self, collection:bool=False) -> None:
         self.lua_ast_convertor = LuaToPythonModule()
         self.python_ast_writer = PythonASTWriter()
-        self.python_source_writer = SourceWriter()
         self.is_collecting = collection
         if self.is_collecting == True:
             self.collection = TranspilerCollector() 
@@ -100,7 +98,6 @@ class LuaToPythonTranspiler:
         return pythonparse(string)
 
     def transpile_file(self, file:str, output_file:str):
-        this_python_source = SourceWriter()
 
         lua_source = self.read_file(file)
         lua_ast: LuaSourceAst = self.make_lua_ast(lua_source)
@@ -111,17 +108,7 @@ class LuaToPythonTranspiler:
         finally:
             for node in py_ast.body:
                 string = self.python_ast_writer.visit(node)
-                src = self.python_source_writer.fix(string, node)
-                this_python_source.add(node, src)
-                self.python_source_writer.add(node, src)
 
-        python_source = this_python_source.dump()
-
-        with open(output_file, "w") as f:
-            f.write(python_source)
-
-        if self.is_collecting == True:
-            self.collection.add(file, lua_source, lua_ast, output_file, python_source, py_ast)
 
     def transpile_directory(self, directory:str, output_directory:str):
         if os.path.exists(directory) == False:
@@ -244,7 +231,7 @@ def get_dependencies(filename, q:Queue):
 
 def mp_transpile_file(file: str, output_file:str):
         self = LuaToPythonTranspiler()
-        this_python_source = SourceWriter()
+        
 
         lua_source = self.read_file(file)
         lua_ast: LuaSourceAst = self.make_lua_ast(lua_source)
@@ -255,13 +242,8 @@ def mp_transpile_file(file: str, output_file:str):
         finally:
             for node in py_ast.body:
                 string = self.python_ast_writer.visit(node)
-                src = self.python_source_writer.fix(string, node)
-                this_python_source.add(node, src)
 
-        python_source = this_python_source.dump()
 
-        with open(output_file, "w") as f:
-            f.write(python_source)
 
         os.remove(file)
         

@@ -8,6 +8,8 @@ from dataclasses import dataclass
 from transpile.macros import Is
 from transpile.luaparser.astnodes import Base
 from typing import Callable, Any
+from transpile.mapper import AnonFixer
+
 
 type Method = Callable
 
@@ -75,42 +77,6 @@ def is_call_and_anonymous_function(node: ast.Call | Any):
         return True
 
 
-def replace_with_output(listable: list, func: Any):
-    retv = []
-    for item in listable:
-        x = func(item)
-        if item:
-            retv.append(x)
-        else:
-            retv.append(item)
-
-    return retv
-
-
-def apply_to_attribute(class_: object, attribute: str, func: Any):
-    if hasattr(class_, attribute):
-        a = getattr(class_, attribute)
-        setattr(class_, attribute, func(a))
-    return class_
-
-
-def apply_to_attributes(class_: object, attributes: list[str], func: Any):
-    for attr in attributes:
-        class_ = apply_to_attribute(class_, attr, func)
-    return class_
-
-
-def apply_to_class_attributes(apply: Any, class_: object, attributes: list):
-    c = class_
-    for attr in attributes:
-        if hasattr(c, attr):
-            attribute = getattr(c, attr)
-            setattr(c, attr, apply(attribute))
-            
-    return c
-
-
-# For finding all the methods and placing them in the correct class at the end
 @dataclass
 class FindableMethod:
     key: str
@@ -217,56 +183,6 @@ class LuaNodeConvertor(ASTNodeConvertor):
     def __init__(self):
         super().__init__()
 
-    def _scope_anonymous_functions(self, nodes):
-        """
-        Finds anonymous functions in classes and moves them to the top of the class methods.
-
-        Args:
-            node (ast.ClassDef): The class to search for anonymous functions in.
-        """
-        def find_anonymous_in_class(node_: ast.ClassDef):
-            """
-            Finds anonymous functions in a class and moves them to the top of the class methods.
-
-            Args:
-                node (ast.ClassDef): The class to search for anonymous functions in.
-            """
-            if is_class_definition(node_):
-                for class_body_node in node_.body:
-                    if is_function_definition(class_body_node):
-                        for class_method_body_node in class_body_node.body:
-                            if is_call_and_anonymous_function(class_method_body_node):
-                                # Move the anonymous function to the top of the class methods
-                                class_body_node.body.insert(
-                                    0, class_method_body_node.keywords[1])
-                                # Remove the anonymous function from the class method
-                                class_method_body_node.keywords = []
-                                print("Anonymous function found in class method")
-
-            return node_
-
-        def find_anonymous_in_func(node_: ast.FunctionDef):
-            if is_function_definition(node_):
-                for func_body_node in node_.body:
-                    if is_call_and_anonymous_function(func_body_node):
-                        node_.body.insert(0, func_body_node.keywords[1])
-                        func_body_node.keywords = []
-                        print("Anonymous function found in function")
-            return node_
-
-        def fix_anonymous_functions(node_):
-            node_ = find_anonymous_in_func(node_)
-            node_ = find_anonymous_in_class(node_)
-            return node_
-
-        xnodes = [
-            apply_to_class_attributes(
-                fix_anonymous_functions, node, ["body", "orelse"]) 
-            for node in nodes
-        ]
-
-        return xnodes
-
     def _globalize_labels(self, nodes: list[ast.AST]) -> list[ast.AST]:
         """
         Finds converted labels in the given nodes and moves the 
@@ -316,11 +232,15 @@ class LuaNodeConvertor(ASTNodeConvertor):
 
         # Next, we need to move any converted labels to the top of the class methods or functions
         nodes = self._globalize_labels(nodes)
-
-        # Finally, we need to move any anonymous functions to the top of the class methods or functions
-        nodes = self._scope_anonymous_functions(nodes)
-
-        return nodes
+        
+        mod = ast.Module(body=nodes)
+        
+        af = AnonFixer()
+        af.visit(mod)
+        module = af.finalize(mod)        
+        ast.fix_missing_locations(module)
+        
+        return module.body
 
     def _super_from_callattr(self, node: ast.Call):
         """

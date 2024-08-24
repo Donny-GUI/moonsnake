@@ -638,6 +638,28 @@ class NodeVisitor(object):
         return self.generic_visit(node)
 
 
+def iter_children(lookingfor, node, stack):
+    for subnode in iter_child_nodes(node):
+        stack.append(subnode)
+        
+        if subnode == lookingfor:
+            return True , stack
+        
+        if iter_children(lookingfor, subnode, stack):
+            return True, stack
+        
+        stack.pop(-1)
+    return False, stack
+
+def get_node_scope(node, parent):
+    stack = [parent]
+    while True:
+        found, stack = iter_children(node, stack[-1], stack)
+        if found:
+            return stack
+        
+
+
 class PythonASTWriter(NodeVisitor):
 
     def __init__(self, *, _avoid_backslashes=False):
@@ -654,6 +676,9 @@ class PythonASTWriter(NodeVisitor):
         self._inside = []
         self._last = [None, None]
 
+    def start_over(self):
+        self.visit(self._parent)        
+    
     def writelines(self, lines):
         self._source.extend(lines)
 
@@ -713,6 +738,7 @@ class PythonASTWriter(NodeVisitor):
         (using ast.parse) will generate an AST equivalent to *node*"""
         self._source = []
         self._inside = []
+        self._parent = node
         self.traverse(node)
         self._last.append(node.__class__.__name__)
         return "".join(self._source)
@@ -1610,9 +1636,35 @@ class PythonASTWriter(NodeVisitor):
         if node.keywords and node.keywords[0] == "ANON":
             definition = self.make(node.keywords[1])
             buffer = []
-            
             for line in self.splitlines(definition):
                 buffer.append(self.wrapline(line))
+            scope = get_node_scope(node, self._parent)
+            remake = False
+            while True:
+                try:
+                    area = scope.pop(-1)
+                except IndexError:
+                    if hasattr(area, "body"):
+                        area.body.insert(0, node.keywords[1])
+                        remove = True
+                    else:
+                        self.writelines(buffer)
+                    break
+                
+                if isinstance(area, ast.FunctionDef):
+                    if area.name.startswith("lambda"):
+                        continue
+                    area.body.insert(0, node.keywords[1])
+                    remake = True
+                    break
+                
+            node.keywords = []
+            
+            if remake == True:
+                self.visit(self._parent)
+            
+                    
+                
         # super check
         if (
             self._inside_class == True
