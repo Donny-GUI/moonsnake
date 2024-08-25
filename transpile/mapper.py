@@ -95,13 +95,14 @@ lua_to_python_tempfile = {
     # I/O functions
     "os.tmpname": "tempfile.mktemp",  # Create a temporary file name
     "io.tmpfile": "tempfile.TemporaryFile",  # Create a temporary file
+}
+other = {
     "io.input": "open",  # Open a file for reading
     "io.open": "open",  # Open a file
     "io.output": "open",  # Open a file for writing
     "os.exit": "sys.exit",  # Exit program
     "os.setlocale": "locale.setlocale",  # Set locale
 }
-
 lua_to_python_sys = {
     "os.exit": "sys.exit",
 }
@@ -176,6 +177,27 @@ class LuaToPythonMapper:
             self.string = self.string.replace("collectgarbage", "gc.collect")
             self.string = "import gc\n" + self.string
         
+
+        # For string conversion
         self.string = self.string.replace("tostring", "str")
+        
+        if self.string.find("os.setlocale") != -1:
+            self.string.replace("os.setlocale",  "locale.setlocale")
+            self.string = "import locale\n" + self.string
+        
+        tempfile_search = re.compile(r"(os\.tmpname|io\.tmpfile)")
+        if tempfile_search.search(self.string):
+            for lua, python in lua_to_python_tempfile.items():
+                self.string = self.string.replace(lua, python)
+            self.string = "import tempfile\n" + self.string
+        
+        re_search = re.compile(r"string\.(gmatch|gsub|match)")
+        if re_search.search(self.string):
+            for lua, python in lua_to_python_re.items():
+                self.string = self.string.replace(lua, python)
+            self.string = "import re\n" + self.string
+        
+        
+
             
         return self.string
