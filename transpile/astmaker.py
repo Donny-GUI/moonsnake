@@ -8,7 +8,6 @@ from dataclasses import dataclass
 from transpile.macros import Is
 from transpile.luaparser.astnodes import Base
 from typing import Callable, Any
-from transpile.mapper import AnonFixer
 
 
 type Method = Callable
