@@ -2,5 +2,7 @@
 /patterns.json
 /temp.py
 /test.py
+/tests.py
 /output
 __pycache__/
+examples/
