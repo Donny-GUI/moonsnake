@@ -198,6 +198,6 @@ class LuaToPythonMapper:
             self.string = "import re\n" + self.string
         
         
-
+        self.string.replace(".init(", ".__init__(")
             
         return self.string

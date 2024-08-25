@@ -110,6 +110,7 @@ class ASTNodeConvertor:
         self.anon_func_count = 0
         self.anon_funcs = []
         self.anon_map = {}
+        self.anon_signatures = []
 
     def convert(self, node) -> ast.AST:
         """
@@ -893,8 +894,23 @@ class LuaNodeConvertor(ASTNodeConvertor):
             args=[arg for arg in args.args],
             keywords=[]
         )
-
-        self.scope.body.insert(0, ast.FunctionDef(name=name,
+        
+        signature = []
+        for arg in args.args:
+            if isinstance(arg, ast.arg):
+                signature.append(arg.arg)
+        for x in body:
+            try:
+                string = ast.unparse(x)
+                signature.append(string)
+            except:
+                pass
+        
+        sig = "".join(signature)
+        if sig in self.anon_signatures:
+            pass
+        else:    
+            self.scope.body.insert(0, ast.FunctionDef(name=name,
                                               args=args,
                                               body=body))
 
