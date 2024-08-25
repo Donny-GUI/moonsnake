@@ -28,6 +28,16 @@ git clone https://gitub.com/Donny-GUI/moonsnake.git
 
 ## TODO
 
-- Fix single line call asts so that it will give the proper indentation
-- fix lambda invokes
-- fix import [single letter]
+- ~Fix single line call asts so that it will give the proper indentation~
+- ~fix lambda invokes~
+- ~fix import [single letter]~
+- ~fix indentation~
+- convert single line lambdas to actual lambdas
+- ~map os standard lib~
+- ~map garbage collection lib~
+- ~map tostring() -> str()~
+- ~map os.exit() to sys.exit()~
+- ~map os time libary to python time libary~
+- ~map math libary~
+- ~map tempfile~
+- ~map regex lib~
