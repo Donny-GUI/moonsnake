@@ -1,6 +1,5 @@
 from transpile.astmaker import LuaToPythonModule
 from transpile.astwriter import PythonASTWriter
-from transpile.formater import SourceWriter
 from transpile.utility import directory_files_by_extension
 from transpile.tests import LuaToPythonTranspiler as LTPT
 from transpile.utility import unique_filename, set_extension
@@ -45,7 +44,6 @@ def lua_file_to_python_string(path: str) -> str:
     # init classes for transpiler
     convert = LuaToPythonModule(None)
     writer = PythonASTWriter()
-    source = SourceWriter()
     # convert the file to a python module
     mod = convert.to_module(path)
     # add the strings to source writer
