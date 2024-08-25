@@ -234,13 +234,9 @@ class LuaNodeConvertor(ASTNodeConvertor):
         nodes = self._globalize_labels(nodes)
         
         mod = ast.Module(body=nodes)
+        ast.fix_missing_locations(mod)
         
-        af = AnonFixer()
-        af.visit(mod)
-        module = af.finalize(mod)        
-        ast.fix_missing_locations(module)
-        
-        return module.body
+        return mod.body
 
     def _super_from_callattr(self, node: ast.Call):
         """
@@ -756,6 +752,8 @@ class LuaNodeConvertor(ASTNodeConvertor):
         body = self.convert(node.body)
         n = ast.FunctionDef(name=name, args=args, body=body)
 
+        self.scope = n
+        
         return n
 
     def convert_LocalFunction(self, node: last.LocalFunction = None):
@@ -828,6 +826,7 @@ class LuaNodeConvertor(ASTNodeConvertor):
             name=name, args=args, body=body, type_params=[], decorator_list=[]
         )
         self._to_find.append(FindableMethod(key=key, function=n))
+        self.scope = n
         return n
 
     def convert_Nil(self, node: last.Nil = None):
@@ -893,18 +892,12 @@ class LuaNodeConvertor(ASTNodeConvertor):
                 id=name,
                 ctx=ast.Load()),
             args=[arg for arg in args.args],
-            keywords=["ANON", ast.FunctionDef(name=name,
-                                              args=args,
-                                              body=body)]
+            keywords=[]
         )
 
-        self.anon_funcs.append(
-            ast.FunctionDef(
-                name=name,
-                args=args,
-                body=body,
-            )
-        )
+        self.scope.body.insert(0, ast.FunctionDef(name=name,
+                                              args=args,
+                                              body=body))
 
         return n
 

@@ -1632,38 +1632,7 @@ class PythonASTWriter(NodeVisitor):
             print("GOTO")
             self.fill()
             self.traverse(node.func)
-            return
-        if node.keywords and node.keywords[0] == "ANON":
-            definition = self.make(node.keywords[1])
-            buffer = []
-            for line in self.splitlines(definition):
-                buffer.append(self.wrapline(line))
-            scope = get_node_scope(node, self._parent)
-            remake = False
-            while True:
-                try:
-                    area = scope.pop(-1)
-                except IndexError:
-                    if hasattr(area, "body"):
-                        area.body.insert(0, node.keywords[1])
-                        remove = True
-                    else:
-                        self.writelines(buffer)
-                    break
-                
-                if isinstance(area, ast.FunctionDef):
-                    if area.name.startswith("lambda"):
-                        continue
-                    area.body.insert(0, node.keywords[1])
-                    remake = True
-                    break
-                
-            node.keywords = []
-            
-            if remake == True:
-                self.visit(self._parent)
-            
-                    
+            return       
                 
         # super check
         if (
