@@ -18,6 +18,7 @@ class TranspileError(SyntaxError):
                  col_offset: int,
                  message: str,
                  line: int,
+                 lineno:int,
                  text: str,
                  args: tuple,
                  source:str):
@@ -29,9 +30,13 @@ class TranspileError(SyntaxError):
         self.col_offset: int = col_offset
         self.message: str = message
         self.line: str = line
+        self.lineno: int = lineno
         self.text: str = text
         self.args: tuple = args
         self.offender = self.source[self.col_offset-1:self.end_offset-1]
+        if self.lineno == None:            
+            self.lineno = self.end_lineno
+            self.end_lineno+=1
     
     def get_error(self):
         return self.text
@@ -61,6 +66,41 @@ class TranspileError(SyntaxError):
         print(below)
         print(self.message)
         return highlighted
+    
+    def remove_error(self):
+        with open(self.filepath, "r") as f:
+            lines = f.readlines()
+
+            linerange = range(self.lineno, self.end_lineno)
+            comment_index = 0
+            for i in linerange:
+                comment_index = 0
+                for char in lines[i]:
+                    if char != ' ':
+                        break
+                    comment_index += 1
+                lines[i] = lines[i][:comment_index] + f"#ERROR {self.offset} - {self.col_offset}" + lines[i][comment_index:]
+        
+        return "\n".join(lines)
+    
+        def get_indent(line):
+            c = 0
+            for char in line:
+                if char == " ":
+                    c += 1
+                elif char == "\t":
+                    c += 4
+                else:
+                    break
+            return c*" "
+        
+        ind = get_indent(lines[self.end_lineno])
+        lines.insert(self.end_lineno-1, f'{ind}"""')
+        lines.insert(self.end_lineno+1, f'{ind}"""')
+        
+        return "\n".join(lines)
+    
+        
 
 class Success:
     def __init__(self) -> None:
@@ -76,7 +116,7 @@ class Success:
         return
 
 
-def test_transpiled_file(filepath:str):
+def test_transpiled_file(filepath:str) -> Success|TranspileError:
     """
     Test the output string from the transpiler. attempt to parse it into an ast
     then catch any errors and highlight them.
@@ -95,6 +135,7 @@ def test_transpiled_file(filepath:str):
                               end_lineno=e.end_lineno,
                               end_col_offset=e.end_offset,
                               message=e.msg,
+                              lineno=e.lineno,
                               line=e.lineno, 
                               text=e.text,
                               args=e.args,

@@ -30,28 +30,6 @@ def transpile_directory(directory: str, outputdir: str = None):
         file_sources = [transpile_lua_file(x) for x in lua_paths]
 
 
-def lua_file_to_python_string(path: str) -> str:
-    """
-    Converts a Lua file at the specified path to a Python string.
-
-    Args:
-        path (str): The path to the Lua file to be converted.
-
-    Returns:
-        str: The converted Python string.
-    """
-    print(f"[Transpiling]: {path}")
-    # init classes for transpiler
-    convert = LuaToPythonModule(None)
-    writer = PythonASTWriter()
-    # convert the file to a python module
-    mod = convert.to_module(path)
-    # add the strings to source writer
-    for node in mod.body:
-        string = writer.visit(node)
-        source.add(node, string)
-
-    return source.dump()
 
 
 def transpile_lua_file(path: str, outputfile: str = None):
@@ -69,7 +47,6 @@ def transpile_lua_file(path: str, outputfile: str = None):
     # init classes for transpiler
     convert = LuaToPythonModule()
     writer = PythonASTWriter()
-    source = SourceWriter()
 
     # convert the file to a python module
     mod = convert.to_module(path)
@@ -81,7 +58,6 @@ def transpile_lua_file(path: str, outputfile: str = None):
     # add the strings to source writer
     for node in mod.body:
         string = writer.visit(node)
-        source.add(node, string)
 
     # write the file
     if outputfile == None:
@@ -89,7 +65,7 @@ def transpile_lua_file(path: str, outputfile: str = None):
             source.dump(f)
     else:
         with open(outputfile, "w") as f:
-            source.dump(f)
+            pass
 
 
 def walk_transpile():

@@ -1614,10 +1614,12 @@ class Builder:
             for v in node.values:
                 if isinstance(v, Invoke) and isinstance(v.func, Name):
                     if v.func.id == "extend":
+
                         return Constructor(node.targets, node.values)
 
         # InstanceMethodCall
         if isinstance(node, Invoke):
+           
             if isinstance(node.source, Index) and isinstance(node.func, Name):
                 return InstanceMethodCall(
                     source=node.source, func=node.func, args=node.args
@@ -1630,5 +1632,9 @@ class Builder:
                     return ForEnumerate(
                         targets=[Name(identifier="k"), Name(identifier="v")], iterator=node.iter, body=node.body
                     )
+        
+        # Super
+        
+                    
 
         return self.iter_polymorph(node)

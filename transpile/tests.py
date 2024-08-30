@@ -1,6 +1,5 @@
 from transpile.astmaker import LuaToPythonModule
 from transpile.astwriter import PythonASTWriter
-from transpile.formater import SourceWriter
 from transpile.luaparser.ast import parse as luaparse, Chunk as LuaSourceAst
 from ast import parse as pythonparse
 import os
@@ -11,7 +10,6 @@ class LuaToPythonTranspiler:
     def __init__(self) -> None:
         self.lua_ast_convertor = LuaToPythonModule()
         self.python_ast_writer = PythonASTWriter()
-        self.python_source_writer = SourceWriter()
 
     def read_file(self, file:str) -> str:
         try:

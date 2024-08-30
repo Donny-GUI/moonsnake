@@ -123,6 +123,7 @@ class ASTNodeConvertor:
             ast.AST: The converted Python AST node.
         """
         node_method = self._fetchMethod(node)
+            
         n = node_method(node)
         self._fix_missing(n)
         self._go_to_labels(n)
@@ -785,9 +786,13 @@ class LuaNodeConvertor(ASTNodeConvertor):
 
         body = []
         for bnode in node.body:
-            if isinstance(bnode, last.Invoke):
+            if isinstance(bnode, last.Initializer):
+                if bnode.name.id == "init":
+                    body.append(self.convert_Super(bnode))
+            if isinstance(bnode, last.InstanceMethodCall):
                 if bnode.func.id == "init":
                     body.append(self.convert_Super(bnode))
+                    
                     continue
             body.append(self.convert(bnode))
 
@@ -830,7 +835,7 @@ class LuaNodeConvertor(ASTNodeConvertor):
         return n
 
     def convert_Nil(self, node: last.Nil = None):
-        n = ast.Constant(value=None, kind=None)
+        n = ast.Constant(value="None", kind=None)
         return n
 
     def convert_TrueExpr(self, node: last.TrueExpr = None):
@@ -1367,9 +1372,10 @@ class LuaNodeConvertor(ASTNodeConvertor):
 
         return call_node
 
-    def assign_methods(self, total_nodes):
+    def assign_methods(self, total_nodes: list[ast.AST]) -> list[ast.AST]:
         """
         Assigns methods to their respective classes.
+        And apply any super methods to their respective classes.
 
         Args:
             total_nodes: A list of nodes to be processed.
@@ -1377,12 +1383,47 @@ class LuaNodeConvertor(ASTNodeConvertor):
         Returns:
             A list of nodes with methods assigned to their respective classes.
         """
+        
+        def is_super_method(x: ast.Call, mapping:dict):
+            """
+            Checks if a given ast.Call is a call to a superclass's method.
+
+            Args:
+                x (ast.Call): The node to check.
+                mapping (dict): A dictionary mapping class names to their respective ast.ClassDef objects.
+
+            Returns:
+                bool: True if x is a call to a superclass's method, None otherwise.
+            """
+            if isinstance(x, ast.Call) and isinstance(x.func, ast.Attribute) and isinstance(x.func.value, ast.Name):
+                if x.func.value.id in [y.id for y in mapping[cl.key].bases]:
+                    return True
+        
+        def find_and_fix_super_method_calls(cl: FindableMethod, mapping:dict) -> FindableMethod:
+            """
+            Finds and fixes any super() method calls in the given FindableMethod. 
+            If a method call is found that is calling a superclass's __init__ method, 
+            it is replaced with super().__init__().
+
+            Parameters:
+                cl (FindableMethod): The FindableMethod to search for and fix super() calls in.
+                mapping (dict): A dictionary mapping class names to their respective ast.ClassDef objects.
+
+            Returns:
+                FindableMethod: The modified FindableMethod with any super() calls replaced.
+            """
+            for index, x in enumerate(cl.function.body):
+                if is_super_method(x, mapping):
+                    cl.function.body[index].func.value.id = "super()"
+                    if cl.function.body[index].func.attr == "init":    
+                        cl.function.body[index].func.attr = "__init__"
+            return cl
+        
         for cl in self._to_find:
-            try:
-                self._classes_map[cl.key].body.append(cl.function)
-                total_nodes = [x for x in total_nodes if x != cl.function]
-            except:
-                pass
+            cl = find_and_fix_super_method_calls(cl, self._classes_map)
+            self._classes_map[cl.key].body.append(cl.function)
+            total_nodes = [x for x in total_nodes if x != cl.function]
+            
         return total_nodes
 
 

@@ -87,128 +87,32 @@ def logcall(func):
 
     return wrapper
 
-
-
-script = """from transpile.astmaker import LuaNodeConvertor
-from transpile.astwriter import PythonASTWriter
-from transpile.luaparser.ast import walk, parse
-from transpile.utility import directory_files_by_extension
-from transpile.utility import unique_filename, set_extension
-from transpile.errorhandler import test_transpiled_file, successful
-from transpile.mapper import LuaToPythonMapper
-from ast import Module
-import os
-
-
-local_example_dir = r'C:\Users\donal\Documents\GitHub\moonsnake\examples'
-
-
-def delexamples():
-    for item in os.listdir(local_example_dir):
-        os.remove(f"{local_example_dir}\\{item}")
-
-
-def deltemp():
-    try:
-        os.remove("temp.py")
-        print("[!]temp deleted")
-    except:
-        pass
-
-
-def change_extension(path: str, extension: str) -> str:
-    '''
-    Changes the extension of a file.
+def comment_lines(filepath: str, line_numbers: list[int]) -> str:
+    """
+    Comments out the specified lines in a file, preserving the original indentation.
 
     Args:
-        path (str): The path to the file.
-        extension (str): The new extension.
+        filepath (str): The path to the file.
+        line_numbers (list[int]): A list of line numbers to comment out (1-based index).
 
     Returns:
-        str: The new path with the new extension.
-    '''
-    return set_extension(path, extension)
+        str: The modified content of the file with the specified lines commented out.
+    """
+    # Read the file lines
+    with open(filepath, 'r') as file:
+        lines = file.readlines()
 
+    # Ensure all line numbers are within the valid range
+    if any(line < 1 or line > len(lines) for line in line_numbers):
+        raise ValueError("One or more line numbers are out of range")
 
-def walk_transpile():
-    '''
-    Walks through all files in the specified directory and transpiles them from Lua to Python.
+    # Comment out each specified line, preserving indentation
+    for line_number in line_numbers:
+        original_line = lines[line_number - 1]
+        leading_whitespace = len(original_line) - len(original_line.lstrip())
+        lines[line_number - 1] = (' ' * leading_whitespace) + '#' + original_line.lstrip()
 
-    Args:
-        None
+    # Join the lines back into a single string
+    modified_content = ''.join(lines)
 
-    Returns:
-        None
-    '''
-    for file in directory_files_by_extension():
-        fi = set_extension(file, ".py")
-
-        transpile_lua_file(
-            file, local_example_dir + os.sep + os.path.basename(
-                fi
-            )
-        )
-
-
-def transpile_lua_file(path: str, outputfile: str = None):
-    '''
-        Transpiles a Lua file at the specified path to a Python file.
-
-        Args:
-                path (str): The path to the Lua file to be transpiled.
-                outputfile (str, optional): The path to the output Python file. Defaults to None.
-
-        Returns:
-                None
-    '''
-    # init classes for transpiler
-    convert = LuaNodeConvertor()
-    writer = PythonASTWriter()
-
-    with open(path, "r", errors="ignore") as f:
-        content = f.read()
-
-    lnodes = parse(content).body.body
-    pnodes = convert.convert_nodes(lnodes)
-    # convert the file to a python module
-
-    mod = Module(body=pnodes, type_ignores=[])
-
-    source = []
-    # add the strings to source writer
-    
-    for node in mod.body:
-
-        string = writer.visit(node)
-        string = string.replace("for kv in ipairs(", "for k, v in enumerate(")
-        source.append(string)
-
-    src = "\n".join(source)
-    mapper = LuaToPythonMapper()
-    src = mapper.map_imports(src)
-    
-    # make the unique filename
-    pyfile = set_extension(path, ".py")
-    pyfile = unique_filename(pyfile)
-
-
-    # write the file
-    if outputfile == None:
-
-        with open(pyfile, "w") as f:
-            f.write(src)
-    else:
-
-        with open(outputfile, "w") as f:
-            f.write(src)
-
-        terror = test_transpiled_file(outputfile)
-        if not successful(terror):
-            terror.highlight()
-            input("Press Enter to continue...")
-
-
-delexamples()
-deltemp()
-walk_transpile()
-"""
+    return modified_content
