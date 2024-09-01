@@ -1,4 +1,4 @@
-from transpile.astmaker import LuaToPythonModule
+
 from transpile.astwriter import PythonASTWriter
 from transpile.luaparser.ast import parse as luaparse, Chunk as LuaSourceAst
 from transpile.dependency_checker import DependencyVisitor
@@ -78,7 +78,7 @@ class TranspilerCollector:
 
 class LuaToPythonTranspiler:
     def __init__(self, collection:bool=False) -> None:
-        self.lua_ast_convertor = LuaToPythonModule()
+        self.lua_ast_convertor = ""
         self.python_ast_writer = PythonASTWriter()
         self.is_collecting = collection
         if self.is_collecting == True:

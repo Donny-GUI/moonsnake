@@ -2,78 +2,9 @@
 
 import ast
 import transpile.luaparser.ast as last
-import os
-from pathlib import Path
 from dataclasses import dataclass
 from transpile.macros import Is
 from transpile.luaparser.astnodes import Base
-from typing import Callable, Any
-
-
-type Method = Callable
-
-AccessingAttribute = ast.Load()
-AssigningValue = ast.Store()
-ValueAsArgument = ast.Load()
-RightHandValue = ast.Load()
-
-
-def has_body(node: last.Node) -> bool:
-    """
-    Checks if a node has a non-empty body.
-
-    Args:
-        node (last.Node): The node to check.
-
-    Returns:
-        bool: True if the node has a non-empty body, None otherwise.
-    """
-    if hasattr(node, "body") and node.body != [] and node.body != None:
-        return True
-
-
-def is_class_definition(node: ast.ClassDef | Any):
-    """
-    Checks if a node is a class definition.
-
-    Args:
-        node (ast.AST): The node to check.
-
-    Returns:
-        bool: True if the node is a class definition, None otherwise.
-    """
-    if isinstance(node, ast.ClassDef):
-        return True
-
-
-def is_function_definition(node: ast.FunctionDef | Any):
-    """
-    Checks if a node is a function definition.
-
-    Args:
-        node (ast.AST): The node to check.
-
-    Returns:
-        bool: True if the node is a function definition, None otherwise.
-    """
-    if isinstance(node, ast.FunctionDef):
-        return True
-
-
-def is_call_and_anonymous_function(node: ast.Call | Any):
-    """
-    Checks if a node is an anonymous function.
-
-    Args:
-        node (ast.AST): The node to check.
-
-    Returns:
-        bool: True if the node is an anonymous function, None otherwise.
-    """
-    # Check if the node is a call expression and the first keyword argument
-    # has the name "ANON". the second keyword argument is the function body
-    if isinstance(node, ast.Call) and node.keywords and node.keywords[0].arg == "ANON":
-        return True
 
 
 @dataclass
@@ -90,8 +21,6 @@ class Comment:
 class MultiLineComment:
     def __init__(self, comment: str) -> None:
         self.string = comment
-
-# base class
 
 
 class ASTNodeConvertor:
@@ -111,6 +40,7 @@ class ASTNodeConvertor:
         self.anon_funcs = []
         self.anon_map = {}
         self.anon_signatures = []
+        self.scope= []
 
     def convert(self, node) -> ast.AST:
         """
@@ -123,7 +53,7 @@ class ASTNodeConvertor:
             ast.AST: The converted Python AST node.
         """
         node_method = self._fetchMethod(node)
-            
+
         n = node_method(node)
         self._fix_missing(n)
         self._go_to_labels(n)
@@ -159,7 +89,7 @@ class ASTNodeConvertor:
         if isinstance(node, ast.AST):
             ast.fix_missing_locations(node)
 
-    def _fetchMethod(self, node: last.Node) -> Method:
+    def _fetchMethod(self, node: last.Node):
         """
         Fetches the conversion method for a given node.
 
@@ -233,10 +163,10 @@ class LuaNodeConvertor(ASTNodeConvertor):
 
         # Next, we need to move any converted labels to the top of the class methods or functions
         nodes = self._globalize_labels(nodes)
-        
+
         mod = ast.Module(body=nodes)
         ast.fix_missing_locations(mod)
-        
+
         return mod.body
 
     def _super_from_callattr(self, node: ast.Call):
@@ -676,6 +606,9 @@ class LuaNodeConvertor(ASTNodeConvertor):
         items = []
 
         for x in node:
+            if isinstance(x, last.String):
+                items.append(ast.Constant(value='"' + x.s + '"', kind='str'))
+                continue
             py = self.convert(x)
             if isinstance(py, ast.Name):
                 if py.id == "/":
@@ -754,7 +687,7 @@ class LuaNodeConvertor(ASTNodeConvertor):
         n = ast.FunctionDef(name=name, args=args, body=body)
 
         self.scope = n
-        
+
         return n
 
     def convert_LocalFunction(self, node: last.LocalFunction = None):
@@ -792,7 +725,7 @@ class LuaNodeConvertor(ASTNodeConvertor):
             if isinstance(bnode, last.InstanceMethodCall):
                 if bnode.func.id == "init":
                     body.append(self.convert_Super(bnode))
-                    
+
                     continue
             body.append(self.convert(bnode))
 
@@ -899,7 +832,7 @@ class LuaNodeConvertor(ASTNodeConvertor):
             args=[arg for arg in args.args],
             keywords=[]
         )
-        
+
         signature = []
         for arg in args.args:
             if isinstance(arg, ast.arg):
@@ -910,15 +843,22 @@ class LuaNodeConvertor(ASTNodeConvertor):
                 signature.append(string)
             except:
                 pass
-        
+
         sig = "".join(signature)
         if sig in self.anon_signatures:
             pass
-        else:    
-            self.scope.body.insert(0, ast.FunctionDef(name=name,
-                                              args=args,
-                                              body=body))
-
+        else:
+            if hasattr(self.scope, "body"):
+                self.scope.body.insert(0, 
+                                       ast.FunctionDef(name=name,
+                                                       args=args,
+                                                       body=body))
+            else:
+                self.scope.insert(0, 
+                                  ast.FunctionDef(name=name, 
+                                                  args=args, 
+                                                  body=body))
+        
         return n
 
     def convert_UnaryOp(self, node: last.UnaryOp) -> ast.UnaryOp:
@@ -1308,10 +1248,30 @@ class LuaNodeConvertor(ASTNodeConvertor):
             return ast.ImportFrom(module=module, names=[name])
 
     def convert_MetaTable(self, node: last.MetaTable) -> ast.Name:
+        """
+        Converts a MetaTable node from lua to python.
+
+        The MetaTable node represents the "self" argument in a class method.
+        In python, this is represented as "self.__class__".
+
+        Args:
+            node (last.MetaTable): The MetaTable node to be converted.
+
+        Returns:
+            ast.Name: The converted MetaTable node.
+        """
         return ast.Name(id=f"self.__class__")
 
     def convert_TableConstructor(self, node: last.TableConstructor) -> ast.Call:
+        """
+        Converts a TableConstructor node from lua to python.
 
+        Args:
+            node (last.TableConstructor): The TableConstructor node to be converted.
+
+        Returns:
+            ast.Call: The converted TableConstructor node.
+        """
         args = self.convert_Args(node.args)
         n = ast.Call(func=self.convert(node.func), args=args, keywords=[])
 
@@ -1383,8 +1343,8 @@ class LuaNodeConvertor(ASTNodeConvertor):
         Returns:
             A list of nodes with methods assigned to their respective classes.
         """
-        
-        def is_super_method(x: ast.Call, mapping:dict):
+
+        def is_super_method(x: ast.Call, mapping: dict):
             """
             Checks if a given ast.Call is a call to a superclass's method.
 
@@ -1395,11 +1355,13 @@ class LuaNodeConvertor(ASTNodeConvertor):
             Returns:
                 bool: True if x is a call to a superclass's method, None otherwise.
             """
+            if cl.key == "Object":
+                return 
             if isinstance(x, ast.Call) and isinstance(x.func, ast.Attribute) and isinstance(x.func.value, ast.Name):
                 if x.func.value.id in [y.id for y in mapping[cl.key].bases]:
                     return True
-        
-        def find_and_fix_super_method_calls(cl: FindableMethod, mapping:dict) -> FindableMethod:
+
+        def find_and_fix_super_method_calls(cl: FindableMethod, mapping: dict) -> FindableMethod:
             """
             Finds and fixes any super() method calls in the given FindableMethod. 
             If a method call is found that is calling a superclass's __init__ method, 
@@ -1415,124 +1377,27 @@ class LuaNodeConvertor(ASTNodeConvertor):
             for index, x in enumerate(cl.function.body):
                 if is_super_method(x, mapping):
                     cl.function.body[index].func.value.id = "super()"
-                    if cl.function.body[index].func.attr == "init":    
-                        cl.function.body[index].func.attr = "__init__"
+                    if cl.function.body[index].func.attr.id == "init":
+                        cl.function.body[index].func.attr.id = "__init__"
             return cl
-        
+
         for cl in self._to_find:
+            if cl.key == "Object":
+                continue
             cl = find_and_fix_super_method_calls(cl, self._classes_map)
-            self._classes_map[cl.key].body.append(cl.function)
+            self._append_findable_method(cl)
             total_nodes = [x for x in total_nodes if x != cl.function]
-            
+
         return total_nodes
 
-
-class LuaToPythonModule(LuaNodeConvertor):
-    def __init__(self):
-        super().__init__()
-        self.total_nodes = []
-        self.string = ""
-        self.object = None
-        self.o = None
-
-    def to_module(self, object: str | last.Chunk | Path | ast.AST):
-        """takes a python object and returns an ast.Module
+    def _append_findable_method(self, method: FindableMethod):
+        """
+        Tries to append a given FindableMethod to the body of the respective class definition.
 
         Args:
-            object (str|last.Chunk|Path|ast.AST): converts any object to a python module
-
-        Returns:
-            ast.Module
+            method (FindableMethod): The FindableMethod to append.
         """
-        lua_ast_object = self.ensure_object_is_iterable_nodes(object)
-        python_ast_nodes = self.convert_object(lua_ast_object, [])
-        total_nodes = self.assign_methods(python_ast_nodes)
-        # for func in self.anon_funcs:
-        #    total_nodes.insert(0, func)
-
-        for label, funcdef in self._labels.items():
-            names = []
-
-            for item in ast.walk(funcdef.body):
-                if isinstance(item, ast.Name):
-                    names.append(item.id)
-
-            gl = ast.Global(names=names)
-            funcdef.body.insert(0, gl)
-            total_nodes.append(funcdef)
-
-        m = ast.Module(body=self.cleanse_nodes(total_nodes), type_ignores=[])
-
-        return m
-
-    def ensure_object_is_iterable_nodes(self, object):
-        if isinstance(object, str):
-            string = object
-            if os.path.exists(string):
-                with open(string, "r", errors="ignore") as f:
-                    string = f.read()
-            o = last.parse(string)
-
-        elif isinstance(object, last.Chunk):
-            o = object
-
-        # elif isinstance(object, list):
-        #    is_body = True
-        #    for item in object:
-        #        if not isinstance(item, last.Node):
-        #            is_body = False
-        #    if not is_body:
-        #        raise Exception("not a listable object to convert")
-        #    o = last.Chunk(body=last.Block(body=[object]))
-
-        elif isinstance(object, last.Block):
-            o = last.Chunk(body=object)
-
-        return o
-
-    def convert_object(self, o, total_nodes):
-        if isinstance(o, last.Block):
-            total_nodes = [self.convert(x) for x in o.body]
-        elif isinstance(o, last.Chunk):
-            total_nodes = [self.convert(x) for x in o.body.body]
-        return total_nodes
-
-    def assign_methods(self, total_nodes):
-        """
-        Assigns methods to their respective classes.
-
-        Args:
-            total_nodes: A list of nodes to be processed.
-
-        Returns:
-            A list of nodes with methods assigned to their respective classes.
-        """
-        for cl in self._to_find:
-            try:
-                self._classes_map[cl.key].body.append(cl.function)
-                total_nodes = [x for x in total_nodes if x != cl.function]
-            except:
-                pass
-        return total_nodes
-
-    def cleanse_nodes(self, total_nodes):
-        retv = []
-
-        # cleanse the last.Node types
-        for node in total_nodes:
-            if isinstance(node, last.Node):
-                node = self.convert(node)
-            elif isinstance(node, ast.AST):
-                for child in ast.iter_child_nodes(node):
-                    if isinstance(child, last.Node):
-                        child = self.convert(child)
-            retv.append(node)
-
-        return retv
-
-
-def lua_to_python_ast(object: str | last.Chunk | Path | ast.AST) -> ast.Module:
-    """converts a lua object to a python ast"""
-
-    l = LuaToPythonModule()
-    return l.to_module(object)
+        try:
+            self._classes_map[method.key].body.append(method.function)
+        except:
+            pass
