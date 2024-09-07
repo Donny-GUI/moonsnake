@@ -91,16 +91,13 @@ class KVForLoopTransformer(ast.NodeTransformer):
         if isinstance(node.iter, ast.Call) and isinstance(node.iter.func, ast.Name) and node.iter.func.id == "pairs":
             setattr(node,
                     "iter",
-                    ast.Call(
-                        args=[],
-                        ctx=ast.Load(),
-                        keywords=[],
-                        func=ast.Attribute(
-                            attr="items",
-                            ctx=ast.Load(),
-                            value=ast.Name(
-                                id=node.iter.args[0].id,
-                                ctx=ast.Load()
+                    ast.Call(args=[],
+                             ctx=ast.Load(),
+                             keywords=[],
+                             func=ast.Attribute(attr="items",
+                                                ctx=ast.Load(),
+                                                value=ast.Name(id=node.iter.args[0].id,
+                                                               ctx=ast.Load()
                             ))))
 
             if isinstance(node.target, ast.Name) and len(node.target.id) % 2 == 0:
@@ -121,40 +118,86 @@ class HEXTransformer(ast.NodeTransformer):
 
 
 class TableMethodsTransformer(ast.NodeTransformer):
+    """
+    turns table.insert(instance, value) into instance.append(value) 
+    for libraries based on luas table.
+
+    """
     def visit_Call(self, node: ast.Call) -> ast.Call:
-        # table.
-        if isinstance(node.func, ast.Attribute) and isinstance(node.func.value, ast.Name) and node.func.value.id == "table":
-
-            if node.func.attr == "insert":
-                setattr(node, "func", ast.Attribute(value=node.args[0],
-                                                        attr="append",
-                                                        ctx=ast.Load()))
-                setattr(node, "args", node.args[1:])
-
-            elif node.func.attr == "remove":
-                setattr(node, "func", ast.Attribute(value=node.args[0],
-                                                        attr="remove",
-                                                        ctx=ast.Load()))
-                setattr(node, "args", node.args[1:])
-            
-            return node
-
-            
-        if isinstance(node.func, ast.Attribute) and isinstance(node.func.value, str) and node.func.value == "table":
-            
-            if node.func.attr == "insert":
-                setattr(node, "func", ast.Attribute(value=node.args[0],
-                                                    attr="append",
-                                                    ctx=ast.Load()))
-                setattr(node, "args", node.args[1:])
-
-            elif node.func.attr == "remove":
-                setattr(node, "func", ast.Attribute(value=node.args[0],
-                                                    attr="remove",
-                                                    ctx=ast.Load()))
-                setattr(node, "args", node.args[1:])
-            
-            return node
         
+        if isinstance(node.func, ast.Attribute) and isinstance(node.func.value, ast.Name) and node.func.value.id == 'table' and isinstance(node.func.attr, ast.Name):
+            
+            if node.func.attr.id == "insert":
+                if isinstance(node.args, ast.arguments):
+                    node.func.value = node.args.args[0].arg
+                    node.args = node.args.args[1:]
+                node.func.attr.id = "append"
+            
+            if node.func.attr.id == "remove":
+                if isinstance(node.args, ast.arguments):
+                    node.func.value = node.args.args[0].arg
+                    node.args = node.args.args[1:]
+            
+            
+        return node
 
+
+def first_arg_to_base(node: ast.Call) -> ast.Call:
+    """
+    turns table.insert(instance, value) into instance.append(value)
+
+    Args:
+        node (ast.Call): any call with a attribute as its func
+
+    Returns:
+        ast.Call: _description_
+    """
+    
+    if isinstance(node.args, ast.arguments):
+        node.func.value = node.args.args[0].arg
+        node.args.args.pop(0)
+        
+    return node
+
+def call_is_attribute_with_method(node:ast.Call, object:str="string", method:str="upper") -> bool | None:
+    
+    if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) \
+    and isinstance(node.func.value, ast.Name)\
+    and node.func.value.id == object \
+    and isinstance(node.func.attr, ast.Name)\
+    and node.func.attr.id == method:
+        return True 
+    
+    return 
+
+
+class StringLibraryTransformer(ast.NodeTransformer):
+    """
+    turns string.insert(instance, value) into instance.append(value) 
+    for libraries based on luas string library.
+
+    """
+    def visit_Call(self, node: ast.Call) -> ast.Call:
+        
+            
+        if call_is_attribute_with_method(node, "string", "find"):
+            return first_arg_to_base(node)
+                
+        elif call_is_attribute_with_method(node, "string", "match"):
+            return first_arg_to_base(node)
+        
+        elif call_is_attribute_with_method(node, "string", "gsub"):
+            return first_arg_to_base(node)
+        
+        elif call_is_attribute_with_method(node, "string", "sub"):
+            return first_arg_to_base(node)
+        
+        elif call_is_attribute_with_method(node, "string", "upper"):
+            return first_arg_to_base(node)
+        
+        elif call_is_attribute_with_method(node, "string", "lower"):
+            return first_arg_to_base(node)
+        
+            
+            
         return node

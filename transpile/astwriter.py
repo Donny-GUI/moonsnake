@@ -1372,6 +1372,7 @@ class PythonASTWriter(NodeVisitor):
                     node.format_spec, is_format_spec=True)
 
     def _static_method_helper(self, node):
+        
         if ":" in node.id:
             self.fill(node.id.replace(":", "."))
         else:
