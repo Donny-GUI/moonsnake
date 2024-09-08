@@ -144,7 +144,7 @@ class TableMethodsTransformer(ast.NodeTransformer):
 
 def first_arg_to_base(node: ast.Call) -> ast.Call:
     """
-    turns table.insert(instance, value) into instance.append(value)
+    EX: turns table.insert(instance, value) into instance.append(value)
 
     Args:
         node (ast.Call): any call with a attribute as its func
@@ -170,6 +170,28 @@ def call_is_attribute_with_method(node:ast.Call, object:str="string", method:str
     
     return 
 
+def is_specific_attribute(node:ast.Attribute, object:str="string", method:str="upper") -> bool | None:
+    if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id == object and node.attr == method:
+        return True
+    return
+
+def has_call_func_attribute(node:ast.Call):
+    if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+        return True
+
+def is_method_call(node:ast.AST):
+    if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+        return True
+    return False
+
+def rename_method(node:ast.Call, old:str="lower", method:str="upper") -> ast.Call:
+    if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) \
+    and isinstance(node.func.value, ast.Name)\
+    and isinstance(node.func.attr, ast.Name)\
+    and node.func.attr.id == old:
+        node.func.attr.id = method
+    return node
+
 
 class StringLibraryTransformer(ast.NodeTransformer):
     """
@@ -177,20 +199,20 @@ class StringLibraryTransformer(ast.NodeTransformer):
     for libraries based on luas string library.
 
     """
-    def visit_Call(self, node: ast.Call) -> ast.Call:
         
-            
+    def visit_Call(self, node: ast.Call) -> ast.Call:
+        if is_method_call(node) == False:
+            return node
+        
+        
         if call_is_attribute_with_method(node, "string", "find"):
             return first_arg_to_base(node)
-                
-        elif call_is_attribute_with_method(node, "string", "match"):
-            return first_arg_to_base(node)
         
-        elif call_is_attribute_with_method(node, "string", "gsub"):
-            return first_arg_to_base(node)
         
         elif call_is_attribute_with_method(node, "string", "sub"):
-            return first_arg_to_base(node)
+            node = first_arg_to_base(node)
+            node = rename_method(node, "sub", "replace")
+            return node
         
         elif call_is_attribute_with_method(node, "string", "upper"):
             return first_arg_to_base(node)
@@ -198,6 +220,8 @@ class StringLibraryTransformer(ast.NodeTransformer):
         elif call_is_attribute_with_method(node, "string", "lower"):
             return first_arg_to_base(node)
         
-            
-            
+        elif call_is_attribute_with_method(node, "string", "rep"):
+            node = first_arg_to_base(node)
+            return  rename_method(node, "rep", "replace")
+        
         return node
