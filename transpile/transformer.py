@@ -199,13 +199,17 @@ class StringLibraryTransformer(ast.NodeTransformer):
     for libraries based on luas string library.
 
     """
+    changed = 0
         
     def visit_Call(self, node: ast.Call) -> ast.Call:
+        # check if it is a method call
         if is_method_call(node) == False:
             return node
         
+        self.changed+=1
         
         if call_is_attribute_with_method(node, "string", "find"):
+            
             return first_arg_to_base(node)
         
         
@@ -224,4 +228,51 @@ class StringLibraryTransformer(ast.NodeTransformer):
             node = first_arg_to_base(node)
             return  rename_method(node, "rep", "replace")
         
+        elif call_is_attribute_with_method(node, "string", "format"):
+            return first_arg_to_base(node)
+        
+        
+        self.changed-=1
+        
+        return node
+
+class IPairsTransformer(ast.NodeTransformer):
+    """ 
+    turns:
+    for ab in ipairs(c) 
+    -> 
+    for a, b in c.items():
+    """
+                     
+    def visit_For(self, node: ast.For) -> ast.For:
+
+        if isinstance(node.iter, ast.Call) and isinstance(node.iter.func, ast.Name) and node.iter.func.id == "ipairs":
+            node.iter = ast.Call(
+                func=ast.Attribute(
+                    value=node.iter.args[0],
+                    attr="items",
+                    ctx=ast.Load(),
+                ),
+                args=[],
+                keywords=[]
+            )
+            if isinstance(node.target, ast.Name):
+                stringver = node.target.id 
+                if stringver.startswith("_"):
+                    k = stringver[0]
+                    v = stringver[1:]
+                    node.target = ast.Tuple(elts=[ast.Name(id=k, ctx=ast.Store()), ast.Name(id=v, ctx=ast.Store())], ctx=ast.Store())
+                else:
+                    names = []
+                    ids = []
+                    for char in stringver:
+                        if char not in ids:
+                            ids.append(char)
+                            names.append(ast.Name(id=str(char*stringver.count(char)), ctx=ast.Store()))
+                            if len(ids) == 2:
+                                break
+                    
+                    node.target = ast.Tuple(elts=names, ctx=ast.Store())   
+                    
+            
         return node
