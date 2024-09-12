@@ -197,7 +197,10 @@ class LuaToPythonMapper:
                 self.string = self.string.replace(lua, python)
             self.string = "import re\n" + self.string
         
-        
         self.string.replace(".init(", ".__init__(")
+        
+        if self.string.find(" random.") != -1:
+            self.string = "import random\n" + self.string
+        
             
         return self.string

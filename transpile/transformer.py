@@ -138,6 +138,12 @@ class TableMethodsTransformer(ast.NodeTransformer):
                     node.func.value = node.args.args[0].arg
                     node.args = node.args.args[1:]
             
+            if node.func.attr.id == "sort":
+                if isinstance(node.args, ast.arguments):
+                    node.func.value = node.args.args[0].arg
+                    node.args = node.args.args[1:]
+            
+            
             
         return node
 

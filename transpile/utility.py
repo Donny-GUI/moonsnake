@@ -2,6 +2,8 @@ import os
 from pathlib import Path
 from typing import TypeVar
 import functools
+from ast import parse
+
 
 
 WindowsPath = TypeVar("WindowsPath", str, Path)
@@ -116,3 +118,13 @@ def comment_lines(filepath: str, line_numbers: list[int]) -> str:
     modified_content = ''.join(lines)
 
     return modified_content
+
+
+def parsable(string: str) -> bool:
+    try:
+        parse(string)
+        return True
+    except:
+        return False
+
+    

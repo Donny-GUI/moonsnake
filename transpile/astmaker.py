@@ -655,18 +655,27 @@ class LuaNodeConvertor(ASTNodeConvertor):
                 else:
                     name+=char
                     
-            return index, name
+            return [index, name]
         
     def convert_Forin(self, node: last.Forin = None):
         # ipairs/ pairs / items check
         if isinstance(node.iter, last.Call) and isinstance(node.iter.func, last.Name):
-            
-            if node.iter.func.ident == "ipairs":
+            if node.iter.func.id == "ipairs":
                 node.iter.func.id = "enumerate"
-                node.targets = [last.Name(identifier=x) for x in self._target_name_helper(node.targets[0].id)]
-            
-
-        targets: list = self.convert(node.targets)
+        else:
+            for x in node.iter:
+                if isinstance(x, last.Call) and isinstance(x.func, last.Name):
+                    if x.func.id == "ipairs":
+                        x.func.id = "enumerate"
+                        break
+        
+        if isinstance(node.targets, list):
+            targets: list = [self.convert(x) for x in node.targets]
+        else:
+            targets = self.convert(node.targets)
+        
+        if len(targets) > 1:
+            targets = ast.Tuple(elts=targets, ctx=ast.Load())
 
         iter = self.convert(node.iter)
         body = self.convert(node.body)
