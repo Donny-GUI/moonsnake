@@ -41,3 +41,10 @@ git clone https://gitub.com/Donny-GUI/moonsnake.git
 - ~map math libary~
 - ~map tempfile~
 - ~map regex lib~
+
+
+## current problems
+Here is a current list of known problems with the transpiler
+
+1. Lua index access conversion ie '''self.cards[#self.cards + 1]'''
+2. 

@@ -1004,7 +1004,7 @@ class LuaNodeConvertor(ASTNodeConvertor):
             nn = self.convert_Index(n)
             return nn
         elif isinstance(n, last.String):
-            return n.id
+            return n.id 
 
     def convert_Index(self, node: last.Index = None):
         if node.notation == last.IndexNotation.DOT:
@@ -1012,9 +1012,9 @@ class LuaNodeConvertor(ASTNodeConvertor):
             idx = self.convert(node.idx)
             n = ast.Attribute(value=value, attr=idx)
         elif node.notation == last.IndexNotation.SQUARE:
-            _value = last.to_lua_source(node.value)
-            _idx = last.to_lua_source(node.idx)
-            n = ast.Name(id=f"{_value}[{_idx}]", kind="i")
+            n = ast.Subscript(value = self.convert(node.value), 
+                              slice = self.convert(node.idx), 
+                              ctx = ast.Load())
 
         return n
 
