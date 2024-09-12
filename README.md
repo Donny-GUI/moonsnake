@@ -46,5 +46,5 @@ git clone https://gitub.com/Donny-GUI/moonsnake.git
 ## current problems
 Here is a current list of known problems with the transpiler
 
-1. Lua index access conversion ie '''self.cards[#self.cards + 1]'''
-2. 
+1. ~Lua index access conversion ie 'self.cards[#self.cards + 1]'~
+2. fix keywords showing up as names or as class attributes or class methods.

@@ -1,11 +1,80 @@
 
-
+from keyword import kwlist
 import ast
 import transpile.luaparser.ast as last
 from dataclasses import dataclass
 from transpile.macros import Is
 from transpile.luaparser.astnodes import Base
 
+
+def string_is_keyword(string:str):
+    """
+    Checks if a given string is a keyword in Python.
+
+    This function checks if a string is a keyword by checking if the string is
+    in the list of keywords defined in the Python standard library.
+
+    Parameters
+    ----------
+    string : str
+        The string to check.
+
+    Returns
+    -------
+    bool
+        True if the string is a keyword, False otherwise.
+
+    """
+    return string in kwlist
+    
+def name_is_keyword(name:ast.Name|last.Name):
+    """
+    Checks if an ast.Name or last.Name is a keyword.
+
+    This function checks if a name is a keyword by checking the following:
+        - If the name is an ast.Name, it checks if the id of the name is a
+          keyword.
+        - If the name is a last.Name, it checks if the id of the name is a
+          keyword.
+
+    Parameters
+    ----------
+    name : ast.Name or last.Name
+        The name to check.
+
+    Returns
+    -------
+    bool
+        True if the name is a keyword, False otherwise.
+    """
+
+    if isinstance(name, ast.Name):
+        return string_is_keyword(name.id)
+    elif isinstance(name, last.Name):
+        return string_is_keyword(name.id)
+
+def attribute_is_keyword(attribute:ast.Attribute):
+    """
+    Checks if an ast.Attribute is a keyword.
+
+    This function checks if an attribute is a keyword by checking the following:
+    - if the attribute name is a keyword
+    - if the value of the attribute is a keyword
+    - if the value of the attribute is another attribute that is a keyword
+
+    :param attribute: The attribute to check
+    :type attribute: ast.Attribute
+    :return: True if the attribute is a keyword, False otherwise
+    :rtype: bool
+    """
+    if string_is_keyword(attribute.attr):
+        return True
+    if isinstance(attribute.value, ast.Name) and string_is_keyword(attribute.value.id):
+        return True
+    if isinstance(attribute.value, ast.Attribute) and attribute_is_keyword(attribute.value):
+        return True
+    return False
+    
 
 @dataclass
 class FindableMethod:
@@ -40,7 +109,7 @@ class ASTNodeConvertor:
         self.anon_funcs = []
         self.anon_map = {}
         self.anon_signatures = []
-        self.scope= []
+        self.scope = []
 
     def convert(self, node) -> ast.AST:
         """
