@@ -1,249 +1,269 @@
-
-from transpile.astwriter import PythonASTWriter
-from transpile.luaparser.ast import parse as luaparse, Chunk as LuaSourceAst
-from transpile.dependency_checker import DependencyVisitor
-from ast import parse as pythonparse
-from dataclasses import dataclass
-from ast import Module as PythonModule
-from shutil import rmtree
 import os
-from typing import TypeVar
+import ast
+import importlib.util
+from ast import Module
 from shutil import copytree
-from multiprocessing import Process, Queue
+from multiprocessing import Process
+from transpile.astmaker import LuaNodeConvertor
+from transpile.astwriter import PythonASTWriter
+from transpile.luaparser.ast import parse
+from transpile.utility import directory_files_by_extension, unique_filename, set_extension
+from transpile.errorhandler import test_transpiled_file
+from transpile.mapper import LuaToPythonMapper
+from transpile.transformer import (
+    KVForLoopTransformer,
+    HEXTransformer,
+    TableMethodsTransformer,
+    StringLibraryTransformer,
+    IPairsTransformer,
+)
+from transpile.scopetracker import find_undeclared_variables
+from transpile.formatter import format_python_code
+from transpile.luaparser.astnodes import Node as LuaNode
 
 
-DATA_ATTRIBUTES = ("file", "source", "ast")
+class ModuleTracker:
+    """Tracks and manages Python modules within a specified root directory."""
 
-@dataclass
-class LuaData:
-    file: str
-    source: str
-    ast: LuaSourceAst
+    def __init__(self, root_directory: str):
+        self.root_directory = os.path.abspath(root_directory)
+        self.modules = {}
+        self.module_symbols = {}
 
-@dataclass
-class PythonData:
-    file: str
-    source: str
-    ast: PythonModule
+    def track_modules(self) -> None:
+        """Recursively tracks all Python modules in the root directory."""
+        for dirpath, dirnames, filenames in os.walk(self.root_directory):
+            dirnames[:] = [
+                d for d in dirnames if not d.startswith('__pycache__')]
+            for filename in filenames:
+                if filename.endswith('.py'):
+                    module_name = self._get_module_name(dirpath, filename)
+                    module_path = os.path.join(dirpath, filename)
+                    self.modules[module_name] = module_path
+                    self._extract_symbols(module_name, module_path)
 
-DataType = TypeVar("DataType", *(PythonData,LuaData))
-AbstractTreeType = TypeVar("AbstractTreeType", *(LuaSourceAst, PythonModule))
+    def _get_module_name(self, dirpath: str, filename: str) -> str:
+        """Constructs the module name based on the directory path and filename."""
+        relative_path = os.path.relpath(dirpath, self.root_directory)
+        module_base = os.path.splitext(filename)[0]
+        return module_base if relative_path == '.' else '.'.join(relative_path.split(os.sep) + [module_base])
 
-_datatypes = {"python":PythonData, "lua":LuaData}
+    def _extract_symbols(self, module_name: str, module_path: str) -> None:
+        """Extracts top-level symbols (functions, classes) from a module."""
+        with open(module_path, 'r', encoding='utf-8') as file:
+            try:
+                tree = ast.parse(file.read(), filename=module_path)
+                symbols = {node.name for node in ast.walk(tree) if isinstance(
+                    node, (ast.FunctionDef, ast.ClassDef))}
+                self.module_symbols[module_name] = symbols
+            except SyntaxError as e:
+                print(f"Syntax error while parsing {module_name}: {e}")
+
+    def list_modules(self) -> None:
+        """Prints the list of tracked modules and their paths."""
+        for module_name, module_path in self.modules.items():
+            print(f"{module_name}: {module_path}")
+
+    def load_module(self, module_name: str):
+        """Dynamically loads a module given its name."""
+        if module_name not in self.modules:
+            print(f"Module '{module_name}' not found in tracked modules.")
+            return None
+
+        module_path = self.modules[module_name]
+        try:
+            spec = importlib.util.spec_from_file_location(
+                module_name, module_path)
+            if spec is None:
+                print(f"Failed to create a spec for module '{
+                      module_name}' at {module_path}.")
+                return None
+
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            print(f"Module '{module_name}' loaded successfully.")
+            return module
+
+        except (FileNotFoundError, ImportError, Exception) as e:
+            print(f"Error loading module '{module_name}': {e}")
+        return None
+
+    def fix_missing_imports(self, module_name: str) -> None:
+        """Fixes missing imports in a module by adding required imports found in other tracked modules."""
+        if module_name not in self.modules:
+            print(f"Module '{module_name}' is not tracked.")
+            return
+
+        module_path = self.modules[module_name]
+        with open(module_path, 'r', encoding='utf-8') as file:
+            tree = ast.parse(file.read(), filename=module_path)
+            imported_symbols = self._get_imported_symbols(tree)
+            used_symbols = self._get_used_symbols(tree)
+
+        missing_symbols = used_symbols - imported_symbols
+        needed_imports = self._find_missing_imports(missing_symbols)
+
+        if needed_imports:
+            self._add_imports_to_file(module_path, needed_imports)
+            print(f"Added missing imports to {module_name}: {needed_imports}")
+        else:
+            print(f"No missing imports needed for {module_name}.")
+
+    def _get_imported_symbols(self, tree: ast.AST) -> set:
+        """Extracts symbols that are already imported in the module."""
+        imported_symbols = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                imported_symbols.update(alias.name.split(
+                    '.')[0] for alias in node.names)
+            elif isinstance(node, ast.ImportFrom) and node.module:
+                imported_symbols.add(node.module.split('.')[0])
+        return imported_symbols
+
+    def _get_used_symbols(self, tree: ast.AST) -> set:
+        """Extracts all symbols used in the module."""
+        return {node.id for node in ast.walk(tree) if isinstance(node, ast.Name)}
+
+    def _find_missing_imports(self, missing_symbols: set) -> dict:
+        """Finds which missing symbols are defined in other tracked modules."""
+        needed_imports = {}
+        for symbol in missing_symbols:
+            for module, symbols in self.module_symbols.items():
+                if symbol in symbols:
+                    needed_imports[symbol] = module
+                    break
+        return needed_imports
+
+    def _add_imports_to_file(self, module_path: str, imports: dict) -> None:
+        """Adds missing import statements to the top of the source file."""
+        with open(module_path, 'r+', encoding='utf-8') as file:
+            content = file.readlines()
+            for symbol, module in imports.items():
+                content.insert(0, f"from {module} import {symbol}\n")
+            file.seek(0)
+            file.writelines(content)
 
 
-class TranspileNode:
-    def __init__(self, input: DataType, output: DataType) -> None:
-        self.input = input
-        self.output = output
+def file_to_src(file: str) -> str:
+    """Converts a Lua source file to Python source code using AST transformations."""
+    convert = LuaNodeConvertor()
+    writer = PythonASTWriter()
+    transformers = [
+        StringLibraryTransformer(),
+        KVForLoopTransformer(),
+        TableMethodsTransformer(),
+        HEXTransformer(),
+    ]
+    mapper = LuaToPythonMapper()
 
-class Collection:
-    def __init__(self, name:str) -> None:
-        self.name: str = name
+    with open(file, "r", errors="ignore") as f:
+        content = f.read()
+    lnodes: list[LuaNode] = parse(content).body.body
+    pnodes = convert.convert_nodes(lnodes)
+    mod = Module(body=pnodes, type_ignores=[])
+    source = []
+
+    for node in mod.body:
+        for transformer in transformers:
+            node = transformer.visit(node)
+        source.append(writer.visit(node))
+
+    src = "\n".join(source)
+    src = mapper.map_imports(src)
+    src = format_python_code(src)
+    return src
+
+
+def convert_file(root: str, file: str) -> None:
+    """Converts a Lua file to Python in the specified directory."""
+    path = os.path.join(root, file)
+    source = file_to_src(path)
+    with open(path, 'w') as f:
+        f.write(source)
+    os.rename(path, path.replace(".lua", ".py"))
+
+
+class Transpiler:
+    """Transpiles Lua code to Python."""
+
+    def __init__(self) -> None:
+        self.file = ""
         self.files = []
-        self.directories = []
-        self.sources = {}
-        self.asts = {}
+        self.sources = []
+        self.undeclared_variables = {}
+        self.module_tracker = None
 
-        self.datum = {}
-    
-    def add(self, file: str, source: str, ast:AbstractTreeType):
+    def transpile_file(self, file: str) -> str:
+        """Transpiles a single Lua file to Python."""
+        self.file = file
         self.files.append(file)
-        self.directories.append(os.path.dirname(file))
-        self.sources[file] = source
-        self.asts[file] = ast
-        self.datum[file] = _datatypes[self.name](file, source, ast)
-    
-    def node(self, file):
-        return self.datum[file]
+        convert = LuaNodeConvertor()
+        writer = PythonASTWriter()
+        transformers = [
+            StringLibraryTransformer(),
+            KVForLoopTransformer(),
+            TableMethodsTransformer(),
+            HEXTransformer(),
+        ]
+        mapper = LuaToPythonMapper()
 
+        with open(self.file, "r", errors="ignore") as f:
+            content = f.read()
+        lnodes: list[LuaNode] = parse(content).body.body
+        pnodes = convert.convert_nodes(lnodes)
+        mod = Module(body=pnodes, type_ignores=[])
+        source = []
 
-class TranspilerCollector:
-    def __init__(self, input_language:str="lua", output_language:str="python") -> None:
-        
-        self.origin = Collection(input_language)
-        self.output = Collection(output_language)
-    
-    def add(self,
-            origin_source:str,
-            origin_file:str, 
-            origin_ast:AbstractTreeType, 
-            output_file:str=None, 
-            output_ast:AbstractTreeType=None, 
-            output_source: str="") -> None:
-        
-        self.origin.add(origin_file, origin_source, origin_ast)
-        self.output.add(output_file, output_source, output_ast)
+        for node in mod.body:
+            for transformer in transformers:
+                node = transformer.visit(node)
+            source.append(writer.visit(node))
 
+        src = "\n".join(source)
+        src = mapper.map_imports(src)
+        src = format_python_code(src)
+        self.undeclared_variables[self.file] = find_undeclared_variables(src)
+        return src
 
-class LuaToPythonTranspiler:
-    def __init__(self, collection:bool=False) -> None:
-        self.lua_ast_convertor = ""
-        self.python_ast_writer = PythonASTWriter()
-        self.is_collecting = collection
-        if self.is_collecting == True:
-            self.collection = TranspilerCollector() 
+    def transpile_directory(self, directory: str) -> None:
+        """Transpiles all Lua files in a directory to Python."""
+        self.root = directory
+        output_root = os.path.join(os.getcwd(), "output")
+        copytree(src=self.root, dst=output_root)
 
-    def read_file(self, file:str) -> str:
-        try:
-            with open(file, "r", errors="ignore") as f:
-                return f.read()
-        except Exception as e:
-            raise e
-
-    def make_lua_ast(self, string:str) -> AbstractTreeType:
-        return luaparse(string)
-
-    def make_python_ast(self, string:str) -> AbstractTreeType:
-        return pythonparse(string)
-
-    def transpile_file(self, file:str, output_file:str):
-
-        lua_source = self.read_file(file)
-        lua_ast: LuaSourceAst = self.make_lua_ast(lua_source)
-        try:
-            py_ast = self.lua_ast_convertor.to_module(lua_ast)
-        except:
-            py_ast = PythonModule(body=[])
-        finally:
-            for node in py_ast.body:
-                string = self.python_ast_writer.visit(node)
-
-
-    def transpile_directory(self, directory:str, output_directory:str):
-        if os.path.exists(directory) == False:
-            raise Exception(f"Transpile source directory {directory} doesnt exist")
-
-        # copy directory
-        try:
-            copytree(src=directory, dst=output_directory)
-        except:
-            rmtree(output_directory)
-            copytree(src=directory, dst=output_directory)
-            
-        # get all files to be transpiled
-        args = []
-        procs:list[Process] = []
-        for root, dirs, files in os.walk(output_directory):
+        processes: list[Process] = []
+        for root, _, files in os.walk(output_root):
             for file in files:
-                filepath = os.path.join(root, file)
-                
                 if file.endswith(".lua"):
-                    filename, ext = file.split(".")
-                    python_basename = filename + ".py"
-                    python_path = os.path.join(root, python_basename)
-                    args.append((filepath, python_path))
-                    
-        # save one file for main process
-        mine, pymine = args.pop()
-        # build processes
-        for arg in args:
-            proc = Process(target=mp_transpile_file, args=arg)
-            procs.append(proc)
+                    proc = Process(target=convert_file, args=(root, file))
+                    processes.append(proc)
 
-        # run processes
-        for proc in procs:
+        for proc in processes:
             proc.start()
+        for proc in processes:
+            proc.join()
 
-        # do main work
-        mp_transpile_file(mine, pymine)
-        args.append((mine, pymine))
+        self.module_tracker = ModuleTracker(output_root)
+        self.module_tracker.track_modules()
 
-        # build the next set of processes
-        depends_procs: list[Process] = []
-        dq = Queue()
-        for arg in args:
-            proc = Process(target=get_dependencies, args=(arg[1], dq))
-            depends_procs.append(proc)
+    def test_transpiled_files(self) -> None:
+        """Tests each transpiled Python file for syntax errors and reports missing imports."""
+        for file in self.files:
+            test_transpiled_file(set_extension(file, "py"))
 
-        # join transpile processes
-        for p in procs:
-            p.join()
-        
-        # begin dependency procs
-        for p in depends_procs:
-            p.start()
-        # join dependency procs
-        for p in depends_procs:
-            p.join()
+    def fix_imports(self) -> None:
+        """Fixes missing imports for all modules tracked in the output directory."""
+        for module_name in self.module_tracker.modules:
+            self.module_tracker.fix_missing_imports(module_name)
 
-        # build dependency map
-        dependency_map = {}
-        for arg in args:
-            deps = dq.get()
-            dependency_map[deps[0]] = deps[1]
-        
-        # find needed fixes to imports
-        dependency_fixes_map = {}
+    def list_undeclared_variables(self) -> None:
+        """Prints undeclared variables found during transpilation."""
+        for file, variables in self.undeclared_variables.items():
+            print(f"Undeclared variables in {file}: {variables}")
 
-        for file, depends in dependency_map.items():
-            
-            dependency_fixes_map[file] = {
-                "variable fixes":{}, 
-                "function fixes":{}
-            }
-
-            if depends['missing variables'] != None:
-                for missing_variable in depends["missing variables"]:
-                    for other_file, other_dependencies in dependency_map.items():
-                        if missing_variable in other_dependencies["variables"]:
-                            dependency_fixes_map[file]["variable fixes"][missing_variable] = other_file
-            
-            if depends["missing functions"] != None:
-                for missing_function in depends["missing functions"]:
-                    for other_file, other_dependencies in dependency_map.items():
-                        if missing_function in other_dependencies["functions"]:
-                            dependency_fixes_map[file]["function fixes"][missing_function] = other_file
-            
-        # apply the fixes to the file
-        for file in dependency_map.keys():
-            vfix = []
-            ffix = []
-            fixes = dependency_fixes_map[file]
-
-            variables: dict[str, str] = fixes["variable fixes"]
-            
-            for name, module in variables:
-                reference = module.strip(output_directory).split(".")[0]
-                vfix.append(f"from {reference.replace("\\", ".")} import {name}")
-            
-            functions: dict[str, str] = fixes["function fixes"]
-
-            for name, module in functions:
-                reference = module.strip(output_directory).split(".")[0]
-                ffix.append(f"from {reference.replace("\\", ".")} import {name}")
-
-            with open(file, "r") as f:
-                content = f.read()
-
-            xcontent = "\n".join(vfix) + "\n".join(ffix) + "\n" + content
-            
-            with open(file, "w") as f:
-                f.write(xcontent)
-        
-        
-def get_dependencies(filename, q:Queue):
-    with open(filename, "r", errors="ignore") as f:
-        tree = pythonparse(f.read())
-    depv = DependencyVisitor()
-    depv.visit(tree)
-    q.put((filename, depv.to_dict()))
-
-def mp_transpile_file(file: str, output_file:str):
-        self = LuaToPythonTranspiler()
-        
-
-        lua_source = self.read_file(file)
-        lua_ast: LuaSourceAst = self.make_lua_ast(lua_source)
-        try:
-            py_ast = self.lua_ast_convertor.to_module(lua_ast)
-        except:
-            py_ast = PythonModule(body=[])
-        finally:
-            for node in py_ast.body:
-                string = self.python_ast_writer.visit(node)
-
-
-
-        os.remove(file)
-        
+    def run_transpilation(self, directory: str) -> None:
+        """Executes the transpilation process on a given directory."""
+        self.transpile_directory(directory)
+        self.test_transpiled_files()
+        self.fix_imports()
+        self.list_undeclared_variables()

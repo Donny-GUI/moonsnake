@@ -56,6 +56,12 @@ class VariableScopeAnalyzer(ast.NodeVisitor):
         return self.used_vars - self.declared_vars
 
 
+def find_undeclared_variables(source_code:str):
+    tree = ast.parse(source_code)
+    analyzer = VariableScopeAnalyzer()
+    analyzer.visit(tree)
+    return analyzer.get_undeclared_variables()
+
 def get_undeclared_variables(filepath:str):
     with open(filepath, 'r') as f:
         source_code = f.read()

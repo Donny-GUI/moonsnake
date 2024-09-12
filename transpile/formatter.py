@@ -2,6 +2,40 @@ import ast
 import black
 
 
+def manual_formatting(source_code: str) -> str:
+    lines = source_code.split("\n")
+    first_thing = 0
+    for index, line in enumerate(lines):
+        if line.startswith("def") or line.startswith("class"):
+            first_thing = index - 1
+            break
+    
+    lines.insert(first_thing, "\n")
+    
+    length = len(lines) - 1
+    c = 0
+    while True:
+        if c == length:
+            break
+        
+        line = lines[c]
+        
+        if line.startswith("if __name__ == '__main__':"):
+            lines.insert(c, "\n")
+            length+=1
+            c+=1
+        
+        stripped = lines[c].strip()
+        if stripped.startswith("class "):
+            lines.insert(c, "\n")
+            length+=1
+            c+=1
+        
+        c+=1
+    
+    return "\n".join(lines)
+        
+    
 
 def format_python_code(source_code: str) -> str:
     """
@@ -23,7 +57,6 @@ def format_python_code(source_code: str) -> str:
         )
     except (SyntaxError, black.InvalidInput) as e:
         # Handle parsing errors gracefully and return the original code with an error message
-        print(f"Error: {e}")
-        formatted_code = source_code  # Return the original code if formatting fails
+        formatted_code = source_code
 
     return formatted_code
