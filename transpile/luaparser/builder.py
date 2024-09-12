@@ -1622,7 +1622,9 @@ class Builder:
            
             if isinstance(node.source, Index) and isinstance(node.func, Name):
                 return InstanceMethodCall(
-                    source=node.source, func=node.func, args=node.args
+                    source=node.source, 
+                    func=node.func, 
+                    args=node.args
                 )
 
         # ForEnumerate
@@ -1630,11 +1632,12 @@ class Builder:
             if isinstance(node.iter, Call) and isinstance(node.iter.func, Name):
                 if node.iter.func.id == "ipairs":
                     return ForEnumerate(
-                        targets=[Name(identifier="k"), Name(identifier="v")], iterator=node.iter, body=node.body
+                        targets=node.targets, 
+                        iterator=node.iter, 
+                        body=node.body
                     )
         
         # Super
         
-                    
 
         return self.iter_polymorph(node)

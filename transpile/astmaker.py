@@ -644,23 +644,37 @@ class LuaNodeConvertor(ASTNodeConvertor):
         )
 
         return n
-
+    
+    def _target_name_helper(self, target_string:str):
+            
+            index = target_string[0]
+            name = ""
+            for char in target_string[1:]:
+                if char in index:
+                    index+=char
+                else:
+                    name+=char
+                    
+            return index, name
+        
     def convert_Forin(self, node: last.Forin = None):
-        if (
-            len(node.targets) == 1
-            and node.targets[0].id == "kv"
-            and isinstance(node.iter, last.Call)
-            and node.iter.func.identifier in ["ipairs", "pairs"]
-        ):
-            node.targets = [last.Name(identifier="k"),
-                            last.Name(identifier="v")]
+        # ipairs/ pairs / items check
+        if isinstance(node.iter, last.Call) and isinstance(node.iter.func, last.Name):
+            
+            if node.iter.func.ident == "ipairs":
+                node.iter.func.id = "enumerate"
+                node.targets = [last.Name(identifier=x) for x in self._target_name_helper(node.targets[0].id)]
+            
 
         targets: list = self.convert(node.targets)
 
         iter = self.convert(node.iter)
         body = self.convert(node.body)
-        orelse = []
-        n = ast.For(target=targets, iter=iter, body=body, orelse=[])
+        
+        n = ast.For(target=targets, 
+                    iter=iter, 
+                    body=body, 
+                    orelse=[])
 
         return n
 
@@ -1263,12 +1277,17 @@ class LuaNodeConvertor(ASTNodeConvertor):
 
         return c
 
+    
+    
     def convert_ForEnumerate(self, node: last.ForEnumerate) -> ast.For:
+        node.iterator.func.id = "enumerate"
         iter_call = self.convert_Call(node.iterator)
-        iter_call.func.id = "enumerate"
-
+        
         return ast.For(
-            target=[self.convert(x) for x in node.targets],
+            target=ast.Tuple(
+                elts=[ast.Name(id=x, ctx=ast.Store()) for x in self._target_name_helper(node.targets[0].id)], 
+                ctx=ast.Store()
+            ),
             iter=iter_call,
             body=[self.convert(x) for x in node.body],
             orelse=[],

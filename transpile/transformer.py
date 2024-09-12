@@ -88,7 +88,7 @@ class KVForLoopTransformer(ast.NodeTransformer):
                     id=node.target.id[half:], ctx=ast.Load())]
                 setattr(node, "target", t)
 
-        if isinstance(node.iter, ast.Call) and isinstance(node.iter.func, ast.Name) and node.iter.func.id == "pairs":
+        elif isinstance(node.iter, ast.Call) and isinstance(node.iter.func, ast.Name) and node.iter.func.id == "pairs":
             setattr(node,
                     "iter",
                     ast.Call(args=[],
@@ -154,7 +154,10 @@ def first_arg_to_base(node: ast.Call) -> ast.Call:
     """
     
     if isinstance(node.args, ast.arguments):
-        node.func.value = node.args.args[0].arg
+        if isinstance(node.args.args[0], ast.Constant):
+            node.func.value = node.args.args[0].value
+        else:
+            node.func.value = node.args.args[0].arg
         node.args.args.pop(0)
         
     return node
