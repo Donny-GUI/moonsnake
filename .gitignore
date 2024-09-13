@@ -4,5 +4,6 @@
 /test.py
 /tests.py
 /output
+/decompiled
 __pycache__/
 examples/
