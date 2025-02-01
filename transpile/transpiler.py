@@ -2,8 +2,8 @@ import os
 import ast
 import importlib.util
 from ast import Module
-from shutil import copy2, rmtree, copytree
-from multiprocessing import Process
+from shutil import rmtree, copytree
+from multiprocessing import Process, freeze_support
 from transpile.astmaker import LuaNodeConvertor
 from transpile.astwriter import PythonASTWriter
 from transpile.luaparser.ast import parse
@@ -21,6 +21,7 @@ from transpile.scopetracker import find_undeclared_variables
 from transpile.formatter import format_python_code
 from transpile.luaparser.astnodes import Node as LuaNode
 
+freeze_support()
 
 class ModuleTracker:
     """Tracks and manages Python modules within a specified root directory."""
@@ -146,6 +147,7 @@ class ModuleTracker:
 
 def file_to_src(file: str) -> str:
     """Converts a Lua source file to Python source code using AST transformations."""
+    source = []
     convert = LuaNodeConvertor()
     writer = PythonASTWriter()
     transformers = [
@@ -158,11 +160,11 @@ def file_to_src(file: str) -> str:
 
     with open(file, "r", errors="ignore") as f:
         content = f.read()
+        
     lnodes: list[LuaNode] = parse(content).body.body
     pnodes = convert.convert_nodes(lnodes)
     mod = Module(body=pnodes, type_ignores=[])
-    source = []
-
+    
     for node in mod.body:
         n = node 
         for transformer in transformers:
@@ -173,17 +175,43 @@ def file_to_src(file: str) -> str:
     src = "\n".join(source)
     src = mapper.map_imports(src)
     src = format_python_code(src)
+    
     return src
 
 
-def convert_file(root: str, file: str) -> None:
-    """Converts a Lua file to Python in the specified directory."""
-    path = os.path.join(root, file)
-    source = file_to_src(path)
-    rpath = path.replace(".lua", ".py")
+def mptranspile(file:str):
+    source = []
+    convert = LuaNodeConvertor()
+    writer = PythonASTWriter()
+    transformers = [
+        StringLibraryTransformer(),
+        KVForLoopTransformer(),
+        TableMethodsTransformer(),
+        HEXTransformer(),
+    ]
+    mapper = LuaToPythonMapper()
+
+    with open(file, "r", errors="ignore") as f:
+        content = f.read()
+        
+    lnodes: list[LuaNode] = parse(content).body.body
+    pnodes = convert.convert_nodes(lnodes)
+    mod = Module(body=pnodes, type_ignores=[])
+    
+    for node in mod.body:
+        n = node 
+        for transformer in transformers:
+            n = transformer.visit(n)
+        string = writer.visit(n)
+        source.append(string)
+
+    src = "\n".join(source)
+    src = mapper.map_imports(src)
+    src = format_python_code(src)
+    
+    rpath = file.replace(".lua", ".py")
     with open(rpath, 'w') as f:
-        f.write(source)
-    return path, rpath
+        f.write(src)
 
 
 class Transpiler:
@@ -230,10 +258,14 @@ class Transpiler:
 
     def transpile_directory(self, directory: str) -> None:
         """Transpiles all Lua files in a directory to Python."""
+        freeze_support()
         
+        paths: list[str] = []
+        processes: list[Process] = []
         self.root = directory
-        print("Root: " + self.root)
         output_root = os.getcwd() + os.sep + "output"
+        
+        print("Root: " + self.root)
         if os.path.exists(output_root):
             print("Removing old output directory: " + output_root)
             rmtree(output_root)
@@ -243,33 +275,25 @@ class Transpiler:
                                dst=output_root, 
                                dirs_exist_ok=True)
 
-        processes: list[Process] = []
-        paths = []
         for root, _, files in os.walk(output_root):
             for f in files:
                 if f.endswith(".lua"):
-                    
                     path = root + os.sep + f
-                    rpath = root + os.sep + f.replace(".lua", ".py")
-                    paths.append((rpath, path))
-                    print("Transpiling: " + path)
-                    convert_file(root, f)
-                    print("File transpiled: " + path + " -> " + rpath)
-                    paths.append(path)
-                    
+                    proc = Process(target=mptranspile, args=(path,))
+                    processes.append(proc)
+                    paths.append(path)  
 
         for proc in processes:
             proc.start()
+            
         for proc in processes:
             proc.join()
 
-        print("Removing old files:")
         for path in paths:
-            print("\t" + path)
             os.remove(path)
         
         self.module_tracker = ModuleTracker(output_root)
-        self.module_tracker.track_modules()
+        
 
     def test_transpiled_files(self) -> None:
         """Tests each transpiled Python file for syntax errors and reports missing imports."""
@@ -288,7 +312,40 @@ class Transpiler:
 
     def run_transpilation(self, directory: str) -> None:
         """Executes the transpilation process on a given directory."""
+        freeze_support()
         self.transpile_directory(directory)
-        self.test_transpiled_files()
         self.fix_imports()
         self.list_undeclared_variables()
+
+
+def transpile_directory(directory: str):
+    paths: list[str] = []
+    processes: list[Process] = []
+    output_root = os.getcwd() + os.sep + "output"
+    
+    if os.path.exists(output_root):
+        print("Removing old output directory: " + output_root)
+        rmtree(output_root)
+        
+    print("Creating output directory: " + output_root)
+    output_root = copytree(src=directory, 
+                            dst=output_root, 
+                            dirs_exist_ok=True)
+
+    for root, _, files in os.walk(output_root):
+        for f in files:
+            if f.endswith(".lua"):
+                path = root + os.sep + f
+                proc = Process(target=mptranspile, args=(path,))
+                processes.append(proc)
+                paths.append(path)  
+
+    for proc in processes:
+        proc.start()
+        
+    for proc in processes:
+        proc.join()
+
+    for path in paths:
+        os.remove(path)
+        

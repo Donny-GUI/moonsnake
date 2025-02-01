@@ -1,7 +1,6 @@
-from transpile.astmaker import LuaToPythonModule
+
 from transpile.astwriter import PythonASTWriter
 from transpile.utility import directory_files_by_extension
-from transpile.tests import LuaToPythonTranspiler as LTPT
 from transpile.utility import unique_filename, set_extension
 from transpile.cli import parser
 import os

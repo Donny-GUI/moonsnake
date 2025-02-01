@@ -59,4 +59,6 @@ def format_python_code(source_code: str) -> str:
         # Handle parsing errors gracefully and return the original code with an error message
         formatted_code = source_code
 
+    formatted_code = formatted_code.replace(".is", ".exists")
+    
     return formatted_code
